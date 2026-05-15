@@ -15,4 +15,6 @@ export interface AssetInput {
   description: string;
   /** @nullable */
   documentNote?: string | null;
+  /** Object paths of uploaded proof documents. */
+  documentUrls?: string[];
 }

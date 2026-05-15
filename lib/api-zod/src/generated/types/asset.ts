@@ -15,6 +15,7 @@ export interface Asset {
   description: string;
   /** @nullable */
   documentNote?: string | null;
+  documentUrls?: string[];
   status: AssetStatus;
   /** @nullable */
   feeAmount?: number | null;

@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useSubmitAsset, getListMyAssetsQueryKey, getGetMyAssetSummaryQueryKey } from "@workspace/api-client-react";
+import { ObjectUploader } from "@workspace/object-storage-web";
+import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,8 +14,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Info } from "lucide-react";
+import { ShieldCheck, Info, FileText, X, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useState, useRef } from "react";
 
 const submitSchema = z.object({
   assetType: z.enum(["real_estate", "vehicle", "gold_jewelry", "stocks", "business", "other"], {
@@ -24,20 +27,24 @@ const submitSchema = z.object({
   documentNote: z.string().optional(),
 });
 
+type UploadedDoc = { name: string; objectPath: string };
+
 export default function SubmitAsset() {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const submit = useSubmitAsset();
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const objectPathsRef = useRef<Map<string, { name: string; objectPath: string }>>(new Map());
 
   const form = useForm<z.infer<typeof submitSchema>>({
     resolver: zodResolver(submitSchema),
-    defaultValues: { 
-      assetType: "real_estate", 
-      claimedValue: 0, 
-      description: "", 
-      documentNote: "" 
+    defaultValues: {
+      assetType: "real_estate",
+      claimedValue: 0,
+      description: "",
+      documentNote: "",
     },
   });
 
@@ -47,26 +54,53 @@ export default function SubmitAsset() {
     return null;
   }
 
+  const handleUploadComplete = (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    const newDocs: UploadedDoc[] = [];
+    for (const file of result.successful ?? []) {
+      const stored = objectPathsRef.current.get(file.id);
+      if (stored) newDocs.push(stored);
+    }
+    setUploadedDocs((prev) => [...prev, ...newDocs]);
+    if (newDocs.length > 0) {
+      toast({
+        title: "Document Uploaded",
+        description: `${newDocs.length} file(s) ready to attach to this asset.`,
+      });
+    }
+  };
+
+  const removeDoc = (objectPath: string) => {
+    setUploadedDocs((prev) => prev.filter((d) => d.objectPath !== objectPath));
+  };
+
   const onSubmit = (values: z.infer<typeof submitSchema>) => {
-    submit.mutate({ data: values }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListMyAssetsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetMyAssetSummaryQueryKey() });
-        toast({
-          title: "Asset Declared",
-          description: "Your asset has been submitted for verification.",
-        });
-        setLocation("/dashboard");
+    submit.mutate(
+      {
+        data: {
+          ...values,
+          documentUrls: uploadedDocs.map((d) => d.objectPath),
+        },
       },
-      onError: (err: unknown) => {
-        const msg = (err as { error?: string })?.error;
-        toast({
-          title: "Submission Failed",
-          description: msg || "An error occurred while submitting the asset.",
-          variant: "destructive",
-        });
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListMyAssetsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMyAssetSummaryQueryKey() });
+          toast({
+            title: "Asset Declared",
+            description: "Your asset has been submitted for verification.",
+          });
+          setLocation("/dashboard");
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { error?: string })?.error;
+          toast({
+            title: "Submission Failed",
+            description: msg || "An error occurred while submitting the asset.",
+            variant: "destructive",
+          });
+        },
       }
-    });
+    );
   };
 
   return (
@@ -88,7 +122,7 @@ export default function SubmitAsset() {
         <div className="bg-white border rounded-lg p-8 shadow-sm">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -141,11 +175,11 @@ export default function SubmitAsset() {
                   <FormItem>
                     <FormLabel>Detailed Description</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Provide exact details: addresses, VINs, serial numbers, or ticker symbols." 
+                      <Textarea
+                        placeholder="Provide exact details: addresses, VINs, serial numbers, or ticker symbols."
                         className="min-h-[100px]"
-                        {...field} 
-                        data-testid="input-description" 
+                        {...field}
+                        data-testid="input-description"
                       />
                     </FormControl>
                     <FormMessage />
@@ -160,11 +194,11 @@ export default function SubmitAsset() {
                   <FormItem>
                     <FormLabel>Supporting Documentation Reference</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="List relevant deeds, titles, or certificates held." 
+                      <Textarea
+                        placeholder="List relevant deeds, titles, or certificates held."
                         className="min-h-[80px]"
-                        {...field} 
-                        data-testid="input-doc-note" 
+                        {...field}
+                        data-testid="input-doc-note"
                       />
                     </FormControl>
                     <FormDescription>
@@ -174,6 +208,62 @@ export default function SubmitAsset() {
                   </FormItem>
                 )}
               />
+
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium leading-none mb-1">Proof Documents</p>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Upload images or PDFs of deeds, titles, certificates, or any supporting proof (optional).
+                  </p>
+                </div>
+
+                <ObjectUploader
+                  maxNumberOfFiles={5}
+                  maxFileSize={10 * 1024 * 1024}
+                  onGetUploadParameters={async (file) => {
+                    const res = await fetch("/api/storage/uploads/request-url", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({
+                        name: file.name,
+                        size: file.size,
+                        contentType: file.type,
+                      }),
+                    });
+                    const { uploadURL, objectPath } = await res.json();
+                    objectPathsRef.current.set(file.id, { name: file.name, objectPath });
+                    return {
+                      method: "PUT" as const,
+                      url: uploadURL,
+                      headers: { "Content-Type": file.type },
+                    };
+                  }}
+                  onComplete={handleUploadComplete}
+                  buttonClassName="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-700 transition-colors w-full justify-center"
+                >
+                  <FileText className="h-4 w-4" /> Upload Proof Documents (images / PDF, max 10 MB each)
+                </ObjectUploader>
+
+                {uploadedDocs.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    <p className="text-sm font-medium text-green-700 flex items-center gap-1">
+                      <CheckCircle2 className="h-4 w-4" /> {uploadedDocs.length} document(s) attached
+                    </p>
+                    {uploadedDocs.map((doc) => (
+                      <div key={doc.objectPath} className="flex items-center justify-between bg-slate-50 border rounded px-3 py-2 text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground truncate">
+                          <FileText className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{doc.name}</span>
+                        </div>
+                        <button type="button" onClick={() => removeDoc(doc.objectPath)} className="ml-2 text-muted-foreground hover:text-destructive flex-shrink-0">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="flex justify-end gap-4 pt-4 border-t">
                 <Button variant="outline" type="button" onClick={() => setLocation("/dashboard")} data-testid="button-cancel">

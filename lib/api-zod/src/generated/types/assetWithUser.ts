@@ -15,6 +15,7 @@ export interface AssetWithUser {
   description: string;
   /** @nullable */
   documentNote?: string | null;
+  documentUrls?: string[];
   status: AssetWithUserStatus;
   /** @nullable */
   feeAmount?: number | null;

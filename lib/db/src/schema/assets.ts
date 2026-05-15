@@ -9,6 +9,7 @@ export const assetsTable = pgTable("assets", {
   claimedValue: numeric("claimed_value", { precision: 20, scale: 2 }).notNull(),
   description: text("description").notNull(),
   documentNote: text("document_note"),
+  documentUrls: text("document_urls").array().notNull().default([]),
   status: text("status").notNull().default("pending"),
   feeAmount: numeric("fee_amount", { precision: 20, scale: 2 }),
   rejectionReason: text("rejection_reason"),

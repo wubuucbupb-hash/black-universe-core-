@@ -81,6 +81,7 @@ export const ListMyAssetsResponseItem = zod.object({
   "claimedValue": zod.number(),
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
@@ -102,7 +103,8 @@ export const SubmitAssetBody = zod.object({
   "assetType": zod.enum(['real_estate', 'vehicle', 'gold_jewelry', 'stocks', 'business', 'other']),
   "claimedValue": zod.number().min(1),
   "description": zod.string().min(submitAssetBodyDescriptionMin),
-  "documentNote": zod.string().nullish()
+  "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional().describe('Object paths of uploaded proof documents.')
 })
 
 
@@ -120,6 +122,7 @@ export const GetAssetResponse = zod.object({
   "claimedValue": zod.number(),
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
@@ -167,6 +170,7 @@ export const AdminListAssetsResponseItem = zod.object({
   "claimedValue": zod.number(),
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
@@ -192,6 +196,7 @@ export const ApproveAssetResponse = zod.object({
   "claimedValue": zod.number(),
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
@@ -222,6 +227,7 @@ export const RejectAssetResponse = zod.object({
   "claimedValue": zod.number(),
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
@@ -257,5 +263,33 @@ export const AdminListUsersResponseItem = zod.object({
   "totalClaimedValue": zod.number()
 })
 export const AdminListUsersResponse = zod.array(AdminListUsersResponseItem)
+
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+
+
+
+
+
+export const RequestUploadUrlBody = zod.object({
+  "name": zod.string().min(1),
+  "size": zod.number().min(1),
+  "contentType": zod.string().min(1)
+})
+
+export const RequestUploadUrlResponse = zod.object({
+  "uploadURL": zod.string().url(),
+  "objectPath": zod.string()
+})
+
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const GetStorageObjectParams = zod.object({
+  "objectPath": zod.coerce.string()
+})
 
 

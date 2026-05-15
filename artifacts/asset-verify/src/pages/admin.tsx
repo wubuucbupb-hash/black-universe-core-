@@ -143,14 +143,17 @@ export default function Admin() {
               )}
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-gradient-to-br from-yellow-50 to-amber-100 border-amber-300 shadow-md">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Earned Fees (1%)</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-amber-800">Founder Fee Earned (1%)</CardTitle>
+              <DollarSign className="h-5 w-5 text-amber-600" />
             </CardHeader>
             <CardContent>
               {isStatsLoading ? <Skeleton className="h-8 w-32" /> : (
-                <div className="text-2xl font-serif font-bold">{formatCurrency(stats?.totalFeesEarned || 0)}</div>
+                <>
+                  <div className="text-2xl font-serif font-bold text-amber-900">{formatCurrency(stats?.totalFeesEarned || 0)}</div>
+                  <p className="text-xs text-amber-700 mt-1">1% of all approved asset value</p>
+                </>
               )}
             </CardContent>
           </Card>

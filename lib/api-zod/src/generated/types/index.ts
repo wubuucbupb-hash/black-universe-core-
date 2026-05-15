@@ -21,6 +21,8 @@ export * from './errorResponse';
 export * from './healthStatus';
 export * from './rejectionNote';
 export * from './successResponse';
+export * from './uploadUrlRequest';
+export * from './uploadUrlResponse';
 export * from './user';
 export * from './userLogin';
 export * from './userRegistration';

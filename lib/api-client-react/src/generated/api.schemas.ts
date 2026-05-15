@@ -70,6 +70,8 @@ export interface AssetInput {
   description: string;
   /** @nullable */
   documentNote?: string | null;
+  /** Object paths of uploaded proof documents. */
+  documentUrls?: string[];
 }
 
 export type AssetStatus = typeof AssetStatus[keyof typeof AssetStatus];
@@ -89,6 +91,7 @@ export interface Asset {
   description: string;
   /** @nullable */
   documentNote?: string | null;
+  documentUrls?: string[];
   status: AssetStatus;
   /** @nullable */
   feeAmount?: number | null;
@@ -115,6 +118,7 @@ export interface AssetWithUser {
   description: string;
   /** @nullable */
   documentNote?: string | null;
+  documentUrls?: string[];
   status: AssetWithUserStatus;
   /** @nullable */
   feeAmount?: number | null;
@@ -158,6 +162,20 @@ export interface UserWithStats {
   createdAt: string;
   assetCount: number;
   totalClaimedValue: number;
+}
+
+export interface UploadUrlRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 1 */
+  size: number;
+  /** @minLength 1 */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
 }
 
 export type AdminListAssetsParams = {

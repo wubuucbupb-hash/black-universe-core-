@@ -72,7 +72,7 @@ router.post("/assets", async (req, res): Promise<void> => {
     return;
   }
 
-  const { assetType, claimedValue, description, documentNote } = parsed.data;
+  const { assetType, claimedValue, description, documentNote, documentUrls } = parsed.data;
 
   const [asset] = await db
     .insert(assetsTable)
@@ -82,6 +82,7 @@ router.post("/assets", async (req, res): Promise<void> => {
       claimedValue: claimedValue.toString(),
       description,
       documentNote: documentNote ?? null,
+      documentUrls: documentUrls ?? [],
       status: "pending",
     })
     .returning();
