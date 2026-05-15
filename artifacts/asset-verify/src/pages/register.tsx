@@ -40,7 +40,7 @@ export default function Register() {
         setLocation("/dashboard");
         toast({
           title: "Registration Successful",
-          description: "Welcome to AssetVerify.",
+          description: "Welcome to Black Universe.",
         });
       },
       onError: (err: unknown) => {
