@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Asset verification platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: User operations
+  - name: assets
+    description: Asset operations
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +29,498 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /users/register:
+    post:
+      operationId: registerUser
+      tags: [users]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRegistration"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/login:
+    post:
+      operationId: loginUser
+      tags: [users]
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserLogin"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/logout:
+    post:
+      operationId: logoutUser
+      tags: [users]
+      summary: Logout current user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /assets:
+    get:
+      operationId: listMyAssets
+      tags: [assets]
+      summary: List assets for the current user
+      responses:
+        "200":
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Asset"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: submitAsset
+      tags: [assets]
+      summary: Submit an asset for verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetInput"
+      responses:
+        "201":
+          description: Asset submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assets/{id}:
+    get:
+      operationId: getAsset
+      tags: [assets]
+      summary: Get a specific asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Asset details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAsset
+      tags: [assets]
+      summary: Delete an asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /assets/summary:
+    get:
+      operationId: getMyAssetSummary
+      tags: [assets]
+      summary: Get total asset value summary for current user
+      responses:
+        "200":
+          description: Asset summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetSummary"
+
+  /admin/assets:
+    get:
+      operationId: adminListAssets
+      tags: [admin]
+      summary: Admin - list all assets with optional status filter
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: All assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AssetWithUser"
+
+  /admin/assets/{id}/approve:
+    post:
+      operationId: approveAsset
+      tags: [admin]
+      summary: Admin - approve an asset and take 1% fee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Asset approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+
+  /admin/assets/{id}/reject:
+    post:
+      operationId: rejectAsset
+      tags: [admin]
+      summary: Admin - reject an asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectionNote"
+      responses:
+        "200":
+          description: Asset rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Admin - dashboard stats (totals, fees, pending count)
+      responses:
+        "200":
+          description: Admin statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: Admin - list all registered users
+      responses:
+        "200":
+          description: All users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserWithStats"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SuccessResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    UserRegistration:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+
+    UserLogin:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    User:
+      type: object
+      required: [id, name, email, role, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+
+    AssetInput:
+      type: object
+      required: [assetType, claimedValue, description]
+      properties:
+        assetType:
+          type: string
+          enum: [real_estate, vehicle, gold_jewelry, stocks, business, other]
+        claimedValue:
+          type: number
+          minimum: 1
+        description:
+          type: string
+          minLength: 5
+        documentNote:
+          type: ["string", "null"]
+
+    Asset:
+      type: object
+      required: [id, userId, assetType, claimedValue, description, status, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        assetType:
+          type: string
+        claimedValue:
+          type: number
+        description:
+          type: string
+        documentNote:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        feeAmount:
+          type: ["number", "null"]
+        rejectionReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AssetWithUser:
+      type: object
+      required: [id, userId, assetType, claimedValue, description, status, createdAt, userName, userEmail]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        assetType:
+          type: string
+        claimedValue:
+          type: number
+        description:
+          type: string
+        documentNote:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        feeAmount:
+          type: ["number", "null"]
+        rejectionReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        userName:
+          type: string
+        userEmail:
+          type: string
+
+    AssetSummary:
+      type: object
+      required: [totalSubmitted, totalApproved, totalPending, totalRejected, totalClaimedValue, totalApprovedValue]
+      properties:
+        totalSubmitted:
+          type: integer
+        totalApproved:
+          type: integer
+        totalPending:
+          type: integer
+        totalRejected:
+          type: integer
+        totalClaimedValue:
+          type: number
+        totalApprovedValue:
+          type: number
+
+    AdminStats:
+      type: object
+      required: [totalUsers, totalAssets, pendingAssets, approvedAssets, rejectedAssets, totalFeesEarned, totalVerifiedValue]
+      properties:
+        totalUsers:
+          type: integer
+        totalAssets:
+          type: integer
+        pendingAssets:
+          type: integer
+        approvedAssets:
+          type: integer
+        rejectedAssets:
+          type: integer
+        totalFeesEarned:
+          type: number
+        totalVerifiedValue:
+          type: number
+
+    RejectionNote:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+
+    UserWithStats:
+      type: object
+      required: [id, name, email, role, createdAt, assetCount, totalClaimedValue]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        assetCount:
+          type: integer
+        totalClaimedValue:
+          type: number
