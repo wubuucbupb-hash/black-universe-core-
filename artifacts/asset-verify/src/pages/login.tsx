@@ -27,10 +27,12 @@ export default function Login() {
 
   // Redirect after render — never call setLocation during render
   useEffect(() => {
-    if (user) {
-      setLocation(user.role === "admin" ? "/admin" : "/dashboard");
-    }
-  }, [user, setLocation]);
+  if (user) {
+    setLocation("/dashboard");
+  }
+}, [user, setLocation]);
+
+
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -43,7 +45,8 @@ export default function Login() {
     login.mutate({ data: values }, {
       onSuccess: (res) => {
         setUser(res.user);
-        setLocation(res.user.role === "admin" ? "/admin" : "/dashboard");
+        setLocation("/dashboard");
+
       },
       onError: (err: unknown) => {
         const msg = (err as { error?: string })?.error;
