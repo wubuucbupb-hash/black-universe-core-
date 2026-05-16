@@ -20,21 +20,23 @@ const registerSchema = z.object({
   documentUrl: z.string().optional(),
 });
 
-
 export default function Register() {
   const { user, setUser } = useAuth();
- const form = useForm<z.infer<typeof registerSchema>>({
-  resolver: zodResolver(registerSchema),
-  defaultValues: { 
-    name: "", 
-    email: "", 
-    password: "", 
-    role: "citizen", 
-    subCategory: "", 
-    documentUrl: "" 
-  },
-});
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const register = useRegisterUser();
 
+  const form = useForm<z.infer<typeof registerSchema>>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      role: "citizen",
+      subCategory: "",
+      documentUrl: "",
+    },
+  });
 
   if (user) {
     setLocation("/dashboard");
@@ -51,16 +53,17 @@ export default function Register() {
           description: "Welcome to Black Universe.",
         });
       },
-      onError: (err: unknown) => {
-        const msg = (err as { error?: string })?.error;
+      onError: (err: any) => {
+        const msg = err?.error;
         toast({
           title: "Registration Failed",
           description: msg || "Please check your details and try again.",
           variant: "destructive",
         });
-      }
+      },
     });
   };
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-24 flex flex-col items-center justify-center">
@@ -78,7 +81,6 @@ export default function Register() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               
-              {/* पूरा नाम */}
               <FormField
                 control={form.control}
                 name="name"
@@ -93,7 +95,6 @@ export default function Register() {
                 )}
               />
 
-              {/* ईमेल एड्रेस */}
               <FormField
                 control={form.control}
                 name="email"
@@ -108,7 +109,6 @@ export default function Register() {
                 )}
               />
 
-              {/* पासवर्ड */}
               <FormField
                 control={form.control}
                 name="password"
@@ -194,7 +194,6 @@ export default function Register() {
                 )}
               </div>
 
-              {/* सबमिट बटन */}
               <Button type="submit" className="w-full mt-4" disabled={register.isPending}>
                 {register.isPending ? "Processing..." : "Create Account"}
               </Button>
