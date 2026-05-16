@@ -32,15 +32,13 @@ function Router() {
       </Route>
       
       <Route path="/admin">
-        {user && user.email === "wubuucbupb@gmail.com" ? (
-          <Admin />
-        ) : (
-          <div className="min-h-screen bg-black text-red-500 flex items-center justify-center font-bold">
-            Access Denied. Redirecting...
-            {setTimeout(() => { window.location.href = "/dashboard"; }, 2000) && null}
-          </div>
-        )}
-      </Route>
+  {user && user.email === "wubuucbupb@gmail.com" ? (
+    <Admin />
+  ) : (
+    <Dashboard />
+  )}
+</Route>
+
       
       <Route component={NotFound} />
     </Switch>
