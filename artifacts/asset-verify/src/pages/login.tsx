@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ShieldCheck, KeyRound, Server } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -25,15 +25,19 @@ export default function Login() {
   const login = useLoginUser();
   const [showForgot, setShowForgot] = useState(false);
 
+  // Redirect after render — never call setLocation during render
+  useEffect(() => {
+    if (user) {
+      setLocation(user.role === "admin" ? "/admin" : "/dashboard");
+    }
+  }, [user, setLocation]);
+
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
-  if (user) {
-    setLocation(user.role === "admin" ? "/admin" : "/dashboard");
-    return null;
-  }
+  if (user) return null;
 
   const onSubmit = (values: z.infer<typeof loginSchema>) => {
     login.mutate({ data: values }, {

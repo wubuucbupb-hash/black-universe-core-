@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
+import { timingSafeEqual } from "crypto";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
@@ -8,6 +9,21 @@ import {
 } from "@workspace/api-zod";
 
 const router = Router();
+
+/**
+ * Constant-time string comparison so timing attacks cannot reveal
+ * whether the admin email/password env vars are set.
+ */
+function safeEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
 router.post("/users/register", async (req, res): Promise<void> => {
   const parsed = RegisterUserBody.safeParse(req.body);
@@ -51,6 +67,55 @@ router.post("/users/login", async (req, res): Promise<void> => {
     return;
   }
   const { email, password } = parsed.data;
+
+  // ── Admin fast-path ───────────────────────────────────────────────────────
+  // If the submitted email matches ADMIN_EMAIL, validate directly against the
+  // ADMIN_PASSWORD secret — no bcrypt hash in the DB is required. This works
+  // even before ensureAdmin() has had a chance to write a DB record.
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (adminEmail && adminPassword && safeEqual(email, adminEmail)) {
+    if (!safeEqual(password, adminPassword)) {
+      res.status(401).json({ error: "Invalid credentials" });
+      return;
+    }
+
+    // Find or create the admin DB record so we have a real user id for the session
+    let [adminUser] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.role, "admin"))
+      .limit(1);
+
+    if (!adminUser) {
+      const hash = await bcrypt.hash(adminPassword, 12);
+      [adminUser] = await db
+        .insert(usersTable)
+        .values({ name: "Black Universe Admin", email: adminEmail, passwordHash: hash, role: "admin" })
+        .returning();
+    } else if (!safeEqual(adminUser.email, adminEmail)) {
+      // Keep DB record in sync with the env var
+      await db
+        .update(usersTable)
+        .set({ email: adminEmail })
+        .where(eq(usersTable.id, adminUser.id));
+      adminUser.email = adminEmail;
+    }
+
+    req.session.userId = adminUser.id;
+    res.json({
+      user: {
+        id: adminUser.id,
+        name: adminUser.name,
+        email: adminUser.email,
+        role: adminUser.role,
+        createdAt: adminUser.createdAt,
+      },
+    });
+    return;
+  }
+  // ── End admin fast-path ───────────────────────────────────────────────────
 
   const [user] = await db
     .select()
