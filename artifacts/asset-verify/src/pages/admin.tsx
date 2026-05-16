@@ -56,10 +56,6 @@ export default function Admin() {
 
   if (isAuthLoading) return null;
   
-  if (!user || user.role !== "admin") {
-    setLocation("/dashboard");
-    return null;
-  }
 
   const handleApprove = (id: number) => {
     approveAsset.mutate({ id }, {
