@@ -13,14 +13,35 @@ import Admin from "@/pages/admin";
 
 const queryClient = new QueryClient();
 
+import { useAuth } from "@/components/auth-provider";
+
 function Router() {
+  const { user } = useAuth();
+
   return (
     <Switch>
       <Route path="/" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/submit" component={SubmitAsset} />
-      <Route path="/admin" component={Admin} />
+      
+      <Route path="/dashboard">
+        {user ? <Dashboard /> : <Login />}
+      </Route>
+      
+      <Route path="/submit">
+        {user ? <SubmitAsset /> : <Login />}
+      </Route>
+      
+      <Route path="/admin">
+        {user && user.email === "wubuucbupb@gmail.com" ? (
+          <Admin />
+        ) : (
+          <div className="min-h-screen bg-black text-red-500 flex items-center justify-center font-bold">
+            Access Denied. Redirecting...
+            {setTimeout(() => { window.location.href = "/dashboard"; }, 2000) && null}
+          </div>
+        )}
+      </Route>
+      
       <Route component={NotFound} />
     </Switch>
   );
