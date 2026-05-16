@@ -10,7 +10,6 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
 import SubmitAsset from "@/pages/submit";
-import { default as Home } from "./App";
 import Admin from "@/pages/admin";
 
 const queryClient = new QueryClient();
@@ -35,12 +34,11 @@ function Router() {
       </Route>
       
       <Route path="/admin">
-  {user && user.email === "wubuucbupb@gmail.com" ? (
-    <Admin />
-  ) : (
-    <Dashboard />
-  )}
+  <Admin />
 </Route>
+
+
+
 
       
       <Route component={NotFound} />
