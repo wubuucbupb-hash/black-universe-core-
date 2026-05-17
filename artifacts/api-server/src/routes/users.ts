@@ -3,10 +3,7 @@ import bcrypt from "bcrypt";
 import { timingSafeEqual } from "crypto";
 import { db, usersTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import {
-  RegisterUserBody,
-  LoginUserBody,
-} from "@workspace/api-zod";
+import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -30,10 +27,21 @@ router.post("/users/register", async (req, res): Promise<void> => {
   }
 
   try {
-    const { name, email, password, role, subCategory, documentUrl, phoneNumber } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role,
+      subCategory,
+      documentUrl,
+      phoneNumber,
+    } = req.body;
 
     // चेक करें कि ईमेल पहले से मौजूद तो नहीं है
-    const existingUser = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const existingUser = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email));
     if (existingUser.length > 0) {
       res.status(400).json({ error: "Email already registered" });
       return;
@@ -41,7 +49,10 @@ router.post("/users/register", async (req, res): Promise<void> => {
 
     // चेक करें कि फोन नंबर पहले से मौजूद तो नहीं है
     if (phoneNumber) {
-      const existingPhone = await db.select().from(usersTable).where(eq(usersTable.phoneNumber, phoneNumber));
+      const existingPhone = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.phoneNumber, phoneNumber));
       if (existingPhone.length > 0) {
         res.status(400).json({ error: "Phone number already registered" });
         return;
@@ -60,17 +71,20 @@ router.post("/users/register", async (req, res): Promise<void> => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // डेटाबेस में सेव करना
-    const [newUser] = await db.insert(usersTable).values({
-      name,
-      email,
-      passwordHash,
-      role: role || "0000",
-      subCategory: subCategory || null,
-      documentUrl: documentUrl || null,
-      phoneNumber: phoneNumber || null,
-      accountNumber: generatedAccountNumber,
-      biometricKey: null
-    }).returning();
+    const [newUser] = await db
+      .insert(usersTable)
+      .values({
+        name,
+        email,
+        passwordHash,
+        role: role || "0000",
+        subCategory: subCategory || null,
+        documentUrl: documentUrl || null,
+        phoneNumber: phoneNumber || null,
+        accountNumber: generatedAccountNumber,
+        biometricKey: null,
+      })
+      .returning();
 
     res.status(201).json({
       message: "Registration successful",
@@ -80,10 +94,9 @@ router.post("/users/register", async (req, res): Promise<void> => {
         email: newUser.email,
         role: newUser.role,
         accountNumber: newUser.accountNumber,
-        phoneNumber: newUser.phoneNumber
-      }
+        phoneNumber: newUser.phoneNumber,
+      },
     });
-
   } catch (error: any) {
     res.status(500).json({ error: error.message || "Internal Server Error" });
   }
@@ -101,17 +114,26 @@ router.post("/users/login", async (req, res): Promise<void> => {
 
     // डेटाबेस में ढूंढना (चाहे ईमेल हो, फोन नंबर हो, या अकाउंट नंबर)
     let userFound = null;
-    
-    const byEmail = await db.select().from(usersTable).where(eq(usersTable.email, loginId));
+
+    const byEmail = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, loginId));
     if (byEmail.length > 0) userFound = byEmail[0];
 
     if (!userFound) {
-      const byPhone = await db.select().from(usersTable).where(eq(usersTable.phoneNumber, loginId));
+      const byPhone = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.phoneNumber, loginId));
       if (byPhone.length > 0) userFound = byPhone[0];
     }
 
     if (!userFound) {
-      const byAccount = await db.select().from(usersTable).where(eq(usersTable.accountNumber, loginId));
+      const byAccount = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.accountNumber, loginId));
       if (byAccount.length > 0) userFound = byAccount[0];
     }
 
@@ -120,7 +142,10 @@ router.post("/users/login", async (req, res): Promise<void> => {
       return;
     }
 
-    const passwordMatch = await bcrypt.compare(password, userFound.passwordHash);
+    const passwordMatch = await bcrypt.compare(
+      password,
+      userFound.passwordHash,
+    );
     if (!passwordMatch) {
       res.status(401).json({ error: "Invalid Credentials" });
       return;
@@ -133,10 +158,9 @@ router.post("/users/login", async (req, res): Promise<void> => {
         name: userFound.name,
         email: userFound.email,
         role: userFound.role,
-        accountNumber: userFound.accountNumber
-      }
+        accountNumber: userFound.accountNumber,
+      },
     });
-
   } catch (error: any) {
     res.status(500).json({ error: error.message || "Internal Server Error" });
   }
