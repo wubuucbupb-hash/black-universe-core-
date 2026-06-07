@@ -15,9 +15,13 @@ function requireAuth(req: Request, res: Response): number | null {
   return userId;
 }
 
+// 1. Assets Summary Route (Sahi kiya hua)
 router.get("/assets/summary", async (req, res): Promise<void> => {
-  const userId = requireAuth(req, res);
-  if (!userId) return;
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   const assets = await db
     .select()
@@ -28,10 +32,14 @@ router.get("/assets/summary", async (req, res): Promise<void> => {
   const totalApproved = assets.filter((a) => a.status === "approved").length;
   const totalPending = assets.filter((a) => a.status === "pending").length;
   const totalRejected = assets.filter((a) => a.status === "rejected").length;
-  const totalClaimedValue = assets.reduce((s, a) => s + parseFloat(a.claimedValue), 0);
+
+  const totalClaimedValue = assets.reduce(
+    (s, a) => s + parseFloat(a.claimedValue || "0"),
+    0,
+  );
   const totalApprovedValue = assets
     .filter((a) => a.status === "approved")
-    .reduce((s, a) => s + parseFloat(a.claimedValue), 0);
+    .reduce((s, a) => s + parseFloat(a.claimedValue || "0"), 0);
 
   res.json({
     totalSubmitted,
@@ -43,6 +51,7 @@ router.get("/assets/summary", async (req, res): Promise<void> => {
   });
 });
 
+// 2. Get All Assets
 router.get("/assets", async (req, res): Promise<void> => {
   const userId = requireAuth(req, res);
   if (!userId) return;
@@ -58,10 +67,11 @@ router.get("/assets", async (req, res): Promise<void> => {
       ...a,
       claimedValue: parseFloat(a.claimedValue),
       feeAmount: a.feeAmount != null ? parseFloat(a.feeAmount) : null,
-    }))
+    })),
   );
 });
 
+// 3. Create Asset
 router.post("/assets", async (req, res): Promise<void> => {
   const userId = requireAuth(req, res);
   if (!userId) return;
@@ -72,7 +82,8 @@ router.post("/assets", async (req, res): Promise<void> => {
     return;
   }
 
-  const { assetType, claimedValue, description, documentNote, documentUrls } = parsed.data;
+  const { assetType, claimedValue, description, documentNote, documentUrls } =
+    parsed.data;
 
   const [asset] = await db
     .insert(assetsTable)
@@ -94,6 +105,7 @@ router.post("/assets", async (req, res): Promise<void> => {
   });
 });
 
+// 4. Get Asset by ID
 router.get("/assets/:id", async (req, res): Promise<void> => {
   const userId = requireAuth(req, res);
   if (!userId) return;
@@ -117,6 +129,7 @@ router.get("/assets/:id", async (req, res): Promise<void> => {
   });
 });
 
+// 5. Delete Asset
 router.delete("/assets/:id", async (req, res): Promise<void> => {
   const userId = requireAuth(req, res);
   if (!userId) return;

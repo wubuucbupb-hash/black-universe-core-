@@ -235,48 +235,49 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {assets.map((asset) => (
-                    <TableRow key={asset.id}>
-                      <TableCell className="font-medium">
-                        {formatAssetType(asset.assetType)}
-                      </TableCell>
-                      <TableCell>
-                        <div
-                          className="max-w-[300px] truncate"
-                          title={asset.description}
-                        >
-                          {asset.description}
-                        </div>
-                        {asset.rejectionReason && (
-                          <div className="text-xs text-destructive mt-1 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" />
-                            {asset.rejectionReason}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-serif">
-                        {formatCurrency(asset.claimedValue)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(asset.status)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(asset.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {asset.status === "pending" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => handleDelete(asset.id)}
-                            disabled={deleteAsset.isPending}
-                            data-testid={`button-delete-asset-${asset.id}`}
+                  {Array.isArray(assets) &&
+                    assets.map((asset) => ( 
+                      <TableRow key={asset.id}>
+                        <TableCell className="font-medium">
+                          {formatAssetType(asset.assetType)}
+                        </TableCell>
+                        <TableCell>
+                          <div
+                            className="max-w-[300px] truncate"
+                            title={asset.description}
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            {asset.description}
+                          </div>
+                          {asset.rejectionReason && (
+                            <div className="text-xs text-destructive mt-1 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {asset.rejectionReason}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-serif">
+                          {formatCurrency(asset.claimedValue)}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(asset.status)}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDate(asset.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {asset.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => handleDelete(asset.id)}
+                              disabled={deleteAsset.isPending}
+                              data-testid={`button-delete-asset-${asset.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
             ) : (

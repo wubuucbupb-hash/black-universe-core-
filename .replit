@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "postgresql-16"]
+Modules = ["nodejs-24", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -25,18 +25,19 @@ externalPort = 8080
 
 [[ports]]
 localPort = 8081
-externalPort = 80
+externalPort = 8081
 
 [[ports]]
 localPort = 8082
-externalPort = 3001
+externalPort = 80
 
 [[ports]]
 localPort = 25085
-externalPort = 3000
+externalPort = 25085
 
 [nix]
 channel = "stable-25_05"
+packages = ["psmisc"]
 
 [userenv]
 

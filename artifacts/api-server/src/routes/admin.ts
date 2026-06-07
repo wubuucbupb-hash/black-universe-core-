@@ -2,7 +2,11 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { db, assetsTable, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { AdminListAssetsQueryParams, RejectAssetBody } from "@workspace/api-zod";
+import {
+  AdminListAssetsQueryParams,
+  RejectAssetBody,
+} from "@workspace/api-zod";
+import bcrypt from "bcrypt";
 
 const router = Router();
 
@@ -29,7 +33,9 @@ router.get("/admin/assets", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
   const queryParsed = AdminListAssetsQueryParams.safeParse(req.query);
-  const statusFilter = queryParsed.success ? queryParsed.data.status : undefined;
+  const statusFilter = queryParsed.success
+    ? queryParsed.data.status
+    : undefined;
 
   const rows = await db
     .select({
@@ -60,7 +66,7 @@ router.get("/admin/assets", async (req, res): Promise<void> => {
       ...r,
       claimedValue: parseFloat(r.claimedValue),
       feeAmount: r.feeAmount != null ? parseFloat(r.feeAmount) : null,
-    }))
+    })),
   );
 });
 
@@ -133,8 +139,12 @@ router.get("/admin/stats", async (req, res): Promise<void> => {
 
   const totalAssets = allAssets.length;
   const pendingAssets = allAssets.filter((a) => a.status === "pending").length;
-  const approvedAssets = allAssets.filter((a) => a.status === "approved").length;
-  const rejectedAssets = allAssets.filter((a) => a.status === "rejected").length;
+  const approvedAssets = allAssets.filter(
+    (a) => a.status === "approved",
+  ).length;
+  const rejectedAssets = allAssets.filter(
+    (a) => a.status === "rejected",
+  ).length;
   const totalFeesEarned = allAssets
     .filter((a) => a.feeAmount != null)
     .reduce((s, a) => s + parseFloat(a.feeAmount!), 0);
@@ -156,7 +166,10 @@ router.get("/admin/stats", async (req, res): Promise<void> => {
 router.get("/admin/users", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
-  const users = await db.select().from(usersTable).orderBy(usersTable.createdAt);
+  const users = await db
+    .select()
+    .from(usersTable)
+    .orderBy(usersTable.createdAt);
   const assets = await db.select().from(assetsTable);
 
   const result = users.map((u) => {
@@ -168,11 +181,75 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       role: u.role,
       createdAt: u.createdAt,
       assetCount: userAssets.length,
-      totalClaimedValue: userAssets.reduce((s, a) => s + parseFloat(a.claimedValue), 0),
+      totalClaimedValue: userAssets.reduce(
+        (s, a) => s + parseFloat(a.claimedValue),
+        0,
+      ),
     };
   });
 
   res.json(result);
+});
+
+// 🔥 SAFETY ROUTE: Frontend chahe kisi bhi route par bhatke, ye sabke liye password badal dega 🔥
+router.post("/admin/forgot-password", async (req, res): Promise<void> => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) {
+      res.status(400).json({ error: "Email and new password are required" });
+      return;
+    }
+
+    const [userFound] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+    if (!userFound) {
+      res
+        .status(404)
+        .json({ error: "This email is not registered in the database" });
+      return;
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await db
+      .update(usersTable)
+      .set({ passwordHash: newPasswordHash })
+      .where(eq(usersTable.email, email));
+
+    res.json({ message: "Password updated successfully!" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Internal Server Error" });
+  }
+});
+
+// Kuch systems standard authentication route ko fallback bana dete hain, unke liye backup:
+router.post("/forgot-password", async (req, res): Promise<void> => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) {
+      res.status(400).json({ error: "Email and new password are required" });
+      return;
+    }
+    const [userFound] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+    if (!userFound) {
+      res.status(404).json({ error: "This email is not registered" });
+      return;
+    }
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await db
+      .update(usersTable)
+      .set({ passwordHash: newPasswordHash })
+      .where(eq(usersTable.email, email));
+    res.json({ message: "Password updated successfully!" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Internal Server Error" });
+  }
 });
 
 export default router;

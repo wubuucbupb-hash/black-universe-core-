@@ -1,0 +1,44 @@
+// Core Economy Logic Class
+class GravityEconomy {
+  public wallets: Record<string, number> = {
+    "Founder_Wallet": 0.0,
+    "System_Treasury": 50000.0,
+    "User_A": 1000.0,
+    "User_B": 500.0
+  };
+
+  private feePercentage = 0.01;
+
+  executeTransaction(sender: string, receiver: string, amount: number) {
+    if ((this.wallets[sender] || 0) < amount) {
+      throw new Error(`Insufficient balance for ${sender}`);
+    }
+
+    const fee = amount * this.feePercentage;
+    const finalAmount = amount - fee;
+
+    this.wallets[sender] -= amount;
+    this.wallets[receiver] = (this.wallets[receiver] || 0) + finalAmount;
+    this.wallets["Founder_Wallet"] += fee;
+
+    return { success: true, fee, finalAmount };
+  }
+
+  exitAndTransform(user: string, amount: number) {
+    if ((this.wallets[user] || 0) < amount) {
+      throw new Error("Insufficient balance for asset claim.");
+    }
+
+    const fee = amount * this.feePercentage;
+    const recycledAmount = amount - fee;
+
+    this.wallets[user] -= amount;
+    this.wallets["Founder_Wallet"] += fee;
+    this.wallets["System_Treasury"] += recycledAmount;
+
+    return { success: true, fee, recycledAmount };
+  }
+}
+
+// Global instance taaki aap kahin bhi access kar sakein
+export const economy = new GravityEconomy();

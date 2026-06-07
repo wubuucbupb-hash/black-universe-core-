@@ -4,22 +4,24 @@ import { z } from "zod";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  role: text("role").notNull().default("citizen"),
+  name: text("name"),
+  email: text("email"),
+  passwordHash: text("password_hash"),
+  role: text("role"),
   subCategory: text("sub_category"),
   documentUrl: text("document_url"),
-  phoneNumber: text("phone_number").unique(),
-  accountNumber: text("account_number").unique(),
+  phoneNumber: text("phone_number"),
+  accountNumber: text("account_number"),
   biometricKey: text("biometric_key"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }),
 });
 
-export const insertUserSchema = createInsertSchema(usersTable).omit({
-  id: true,
-  createdAt: true,
-});
+// Validation configuration for types
+export const insertUserSchema = createInsertSchema(usersTable);
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = z.infer<typeof insertUserSchema> & {
+  id?: number;
+  createdAt?: Date;
+};
+
 export type User = typeof usersTable.$inferSelect;
