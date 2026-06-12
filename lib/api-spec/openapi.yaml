@@ -49,7 +49,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/AuthResponse"
         "400":
           description: Validation error
           content:
@@ -285,6 +285,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/Asset"
 
+  /admin/assets/{id}/deposit:
+    post:
+      operationId: depositAsset
+      tags: [admin]
+      summary: Admin - second verification; issue gravity for an approved asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Asset deposited and gravity issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "404":
+          description: Asset or owner not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Asset not approved or already deposited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/stats:
     get:
       operationId: getAdminStats
@@ -406,6 +437,8 @@ components:
         password:
           type: string
           minLength: 6
+        phoneNumber:
+          type: ["string", "null"]
 
     UserLogin:
       type: object
@@ -428,7 +461,10 @@ components:
           type: string
         role:
           type: string
-          enum: [user, admin]
+        phoneNumber:
+          type: ["string", "null"]
+        accountNumber:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -488,6 +524,11 @@ components:
           type: ["number", "null"]
         rejectionReason:
           type: ["string", "null"]
+        mintedAt:
+          type: ["string", "null"]
+          format: date-time
+        gravityIssued:
+          type: ["number", "null"]
         createdAt:
           type: string
           format: date-time
@@ -522,6 +563,11 @@ components:
           type: ["number", "null"]
         rejectionReason:
           type: ["string", "null"]
+        mintedAt:
+          type: ["string", "null"]
+          format: date-time
+        gravityIssued:
+          type: ["number", "null"]
         createdAt:
           type: string
           format: date-time

@@ -23,6 +23,8 @@ export interface UserRegistration {
   email: string;
   /** @minLength 6 */
   password: string;
+  /** @nullable */
+  phoneNumber?: string | null;
 }
 
 export interface UserLogin {
@@ -30,19 +32,15 @@ export interface UserLogin {
   password: string;
 }
 
-export type UserRole = typeof UserRole[keyof typeof UserRole];
-
-
-export const UserRole = {
-  user: 'user',
-  admin: 'admin',
-} as const;
-
 export interface User {
   id: number;
   name: string;
   email: string;
-  role: UserRole;
+  role: string;
+  /** @nullable */
+  phoneNumber?: string | null;
+  /** @nullable */
+  accountNumber?: string | null;
   createdAt: string;
 }
 
@@ -97,6 +95,10 @@ export interface Asset {
   feeAmount?: number | null;
   /** @nullable */
   rejectionReason?: string | null;
+  /** @nullable */
+  mintedAt?: string | null;
+  /** @nullable */
+  gravityIssued?: number | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -124,6 +126,10 @@ export interface AssetWithUser {
   feeAmount?: number | null;
   /** @nullable */
   rejectionReason?: string | null;
+  /** @nullable */
+  mintedAt?: string | null;
+  /** @nullable */
+  gravityIssued?: number | null;
   createdAt: string;
   updatedAt?: string;
   userName: string;

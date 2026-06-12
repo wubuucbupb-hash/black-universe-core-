@@ -17,18 +17,6 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return data;
 }
 
-const CLUSTER_OPTIONS = [
-  { value: "1", name: "Universal", acc: "1000,0000,0000", note: "Core / Law" },
-  { value: "2", name: "Sovereign", acc: "2000,0000,0000", note: "Jurisdiction" },
-  { value: "3", name: "International", acc: "3000,0000,0000", note: "" },
-  { value: "4", name: "Nation", acc: "4000,0000,0000", note: "" },
-  { value: "5", name: "Institution", acc: "5000,0000,0000", note: "" },
-  { value: "6", name: "State", acc: "6000,0000,0000", note: "" },
-  { value: "7", name: "Citizen", acc: "7000,0000,0000", note: "" },
-  { value: "8", name: "Community", acc: "8000,0000,0000", note: "" },
-  { value: "9", name: "Union", acc: "9000,0000,0000", note: "" },
-];
-
 const SYSTEM_CORES = [
   "000000000000", "111111111111",
   "222222222222", "333333333333", "444444444444", "555555555555",
@@ -83,34 +71,6 @@ export default function MatrixEngine() {
 
   const systemAccounts = accounts.filter((a) => SYSTEM_CORES.includes(a.accountNumber));
   const citizens = accounts.filter((a) => !SYSTEM_CORES.includes(a.accountNumber));
-
-  // ── Registration Form ──────────────────────────────────────────────────────
-  const [regForm, setRegForm] = useState({ name: "", phone: "", email: "", clusterPrefix: "7" });
-  const [regChecks, setRegChecks] = useState({ follow: false, message: false });
-
-  const registerMutation = useMutation({
-    mutationFn: (body: object) => apiFetch("/api/matrix/citizens", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: (data) => {
-      toast({ title: "✅ Identity Verified!", description: `Wallet Created: ${data.account.accountNumber}` });
-      setRegForm({ name: "", phone: "", email: "", clusterPrefix: "7" });
-      setRegChecks({ follow: false, message: false });
-      qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
-      qc.invalidateQueries({ queryKey: ["matrix-logs"] });
-    },
-    onError: (e: Error) => toast({ title: "Registration Failed", description: e.message, variant: "destructive" }),
-  });
-
-  function handleRegister() {
-    if (!regForm.name.trim() || !regForm.phone.trim()) {
-      toast({ title: "Missing Fields", description: "Name and phone are required", variant: "destructive" });
-      return;
-    }
-    if (!regChecks.follow || !regChecks.message) {
-      toast({ title: "Gate Refused", description: "Follow + Verification Message rules must be confirmed", variant: "destructive" });
-      return;
-    }
-    registerMutation.mutate({ name: regForm.name, phone: regForm.phone, email: regForm.email, clusterPrefix: regForm.clusterPrefix });
-  }
 
   // ── Mint Form ──────────────────────────────────────────────────────────────
   const [mintForm, setMintForm] = useState({ inrValue: "", assetTitle: "", targetWallet: "" });
@@ -178,108 +138,10 @@ export default function MatrixEngine() {
         {/* ── LEFT PANEL ── */}
         <div className="flex-1 space-y-4">
 
-          {/* STEP 1: Citizen Registration */}
-          <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
-            <h2 className="text-sm font-bold font-mono text-cyan-400 mb-4 tracking-widest">
-              👤 STEP 1: LEGAL CITIZEN REGISTRATION PORTAL
-            </h2>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-zinc-400 text-xs font-mono">Full Name / Enterprise Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Alok Verma"
-                  value={regForm.name}
-                  onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
-                  className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-zinc-400 text-xs font-mono">National ID (Mandatory) *</label>
-                  <input
-                    type="password"
-                    placeholder="Passport / Gov ID"
-                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                    onChange={() => {}}
-                  />
-                  <p className="text-zinc-600 text-[10px] mt-1 font-mono">Stored as [Aadhaar Redacted]</p>
-                </div>
-                <div>
-                  <label className="text-zinc-400 text-xs font-mono">Mobile (+Country Code) *</label>
-                  <input
-                    type="text"
-                    placeholder="+91 9876543210"
-                    value={regForm.phone}
-                    onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
-                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-zinc-400 text-xs font-mono">Email (Optional)</label>
-                <input
-                  type="email"
-                  placeholder="info@domain.com"
-                  value={regForm.email}
-                  onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
-                  className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-zinc-400 text-xs font-mono">Network Cluster</label>
-                <select
-                  value={regForm.clusterPrefix}
-                  onChange={(e) => setRegForm({ ...regForm, clusterPrefix: e.target.value })}
-                  className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                >
-                  {CLUSTER_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.value}. {o.name} — {o.acc}{o.note ? ` (${o.note})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={regChecks.follow}
-                    onChange={(e) => setRegChecks({ ...regChecks, follow: e.target.checked })}
-                    className="accent-cyan-400"
-                  />
-                  <span className="text-zinc-300 text-sm">Rule 1: Official Page Followed</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={regChecks.message}
-                    onChange={(e) => setRegChecks({ ...regChecks, message: e.target.checked })}
-                    className="accent-cyan-400"
-                  />
-                  <span className="text-zinc-300 text-sm">Rule 2: Verification Message Sent</span>
-                </label>
-              </div>
-
-              <button
-                onClick={handleRegister}
-                disabled={registerMutation.isPending}
-                className="w-full py-3 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-black font-extrabold rounded-md transition-all text-sm tracking-wide shadow-lg shadow-cyan-500/20"
-              >
-                {registerMutation.isPending ? "⏳ PROCESSING..." : "🚀 VALIDATE AND INITIALIZE SOVEREIGN ID"}
-              </button>
-            </div>
-          </div>
-
-          {/* STEP 2: System Mint */}
+          {/* STEP 1: System Mint */}
           <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
             <h2 className="text-sm font-bold font-mono text-cyan-400 mb-1 tracking-widest">
-              📥 STEP 2: SYSTEM MINT & SOVEREIGN ROUTING
+              📥 STEP 1: SYSTEM MINT & SOVEREIGN ROUTING
             </h2>
             {!isAdmin ? (
               <div className="mt-4 p-3 border border-yellow-500/30 rounded-md bg-yellow-500/5 text-yellow-400 text-sm font-mono">
@@ -354,10 +216,10 @@ export default function MatrixEngine() {
             )}
           </div>
 
-          {/* STEP 3: P2P Transfer */}
+          {/* STEP 2: P2P Transfer */}
           <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
             <h2 className="text-sm font-bold font-mono text-cyan-400 mb-4 tracking-widest">
-              💸 STEP 3: P2P SOVEREIGN TRANSFER
+              💸 STEP 2: P2P SOVEREIGN TRANSFER
             </h2>
 
             {!user ? (
@@ -366,7 +228,7 @@ export default function MatrixEngine() {
               </div>
             ) : citizens.length === 0 ? (
               <div className="p-3 border border-zinc-700 rounded-md text-zinc-500 text-sm font-mono">
-                Register at least one citizen first
+                No citizen wallets yet — citizens are created at sign-up
               </div>
             ) : (
               <div className="space-y-3">

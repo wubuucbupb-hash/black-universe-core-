@@ -13,6 +13,8 @@ export const assetsTable = pgTable("assets", {
   status: text("status").notNull().default("pending"),
   feeAmount: numeric("fee_amount", { precision: 20, scale: 2 }),
   rejectionReason: text("rejection_reason"),
+  mintedAt: timestamp("minted_at", { withTimezone: true }),
+  gravityIssued: numeric("gravity_issued", { precision: 30, scale: 6 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

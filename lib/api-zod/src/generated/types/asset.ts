@@ -21,6 +21,10 @@ export interface Asset {
   feeAmount?: number | null;
   /** @nullable */
   rejectionReason?: string | null;
+  /** @nullable */
+  mintedAt?: Date | null;
+  /** @nullable */
+  gravityIssued?: number | null;
   createdAt: Date;
   updatedAt?: Date;
 }

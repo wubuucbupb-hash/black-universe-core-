@@ -28,7 +28,8 @@ export const registerUserBodyPasswordMin = 6;
 export const RegisterUserBody = zod.object({
   "name": zod.string().min(registerUserBodyNameMin),
   "email": zod.string().email(),
-  "password": zod.string().min(registerUserBodyPasswordMin)
+  "password": zod.string().min(registerUserBodyPasswordMin),
+  "phoneNumber": zod.string().nullish()
 })
 
 
@@ -45,7 +46,9 @@ export const LoginUserResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['user', 'admin']),
+  "role": zod.string(),
+  "phoneNumber": zod.string().nullish(),
+  "accountNumber": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 })
@@ -58,7 +61,9 @@ export const GetMeResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['user', 'admin']),
+  "role": zod.string(),
+  "phoneNumber": zod.string().nullish(),
+  "accountNumber": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -85,6 +90,8 @@ export const ListMyAssetsResponseItem = zod.object({
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date().optional()
 })
@@ -126,6 +133,8 @@ export const GetAssetResponse = zod.object({
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date().optional()
 })
@@ -174,6 +183,8 @@ export const AdminListAssetsResponseItem = zod.object({
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date().optional(),
   "userName": zod.string(),
@@ -200,6 +211,8 @@ export const ApproveAssetResponse = zod.object({
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date().optional()
 })
@@ -231,6 +244,33 @@ export const RejectAssetResponse = zod.object({
   "status": zod.enum(['pending', 'approved', 'rejected']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Admin - second verification; issue gravity for an approved asset
+ */
+export const DepositAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DepositAssetResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "assetType": zod.string(),
+  "claimedValue": zod.number(),
+  "description": zod.string(),
+  "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "feeAmount": zod.number().nullish(),
+  "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date().optional()
 })

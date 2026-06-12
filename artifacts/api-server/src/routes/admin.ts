@@ -1,12 +1,14 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { db, assetsTable, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, assetsTable, usersTable, custodyLedgerTable } from "@workspace/db";
+import { eq, sql, and, isNull } from "drizzle-orm";
 import {
   AdminListAssetsQueryParams,
   RejectAssetBody,
 } from "@workspace/api-zod";
 import bcrypt from "bcrypt";
+import { mintGravity, ensureUserMatrixAccount } from "../lib/matrixEngine";
+import { encrypt } from "../lib/encryption";
 
 const router = Router();
 
@@ -49,6 +51,8 @@ router.get("/admin/assets", async (req, res): Promise<void> => {
       status: assetsTable.status,
       feeAmount: assetsTable.feeAmount,
       rejectionReason: assetsTable.rejectionReason,
+      mintedAt: assetsTable.mintedAt,
+      gravityIssued: assetsTable.gravityIssued,
       createdAt: assetsTable.createdAt,
       updatedAt: assetsTable.updatedAt,
       userName: usersTable.name,
@@ -67,6 +71,7 @@ router.get("/admin/assets", async (req, res): Promise<void> => {
       ...r,
       claimedValue: parseFloat(r.claimedValue),
       feeAmount: r.feeAmount != null ? parseFloat(r.feeAmount) : null,
+      gravityIssued: r.gravityIssued != null ? parseFloat(r.gravityIssued) : null,
     })),
   );
 });
@@ -128,6 +133,128 @@ router.post("/admin/assets/:id/reject", async (req, res): Promise<void> => {
     claimedValue: parseFloat(updated.claimedValue),
     feeAmount: updated.feeAmount != null ? parseFloat(updated.feeAmount) : null,
   });
+});
+
+// ── Deposit / Mint (second verification) ───────────────────────────────────
+// Only available on already-approved assets that have not yet been minted.
+// Issues gravity to the owner's Matrix account and locks a custody ledger entry.
+router.post("/admin/assets/:id/deposit", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = parseInt(req.params.id);
+
+  // Pre-flight checks for clear error messages. The authoritative guard against
+  // double-issuance is the atomic claim inside the transaction below.
+  const [asset] = await db
+    .select()
+    .from(assetsTable)
+    .where(eq(assetsTable.id, id))
+    .limit(1);
+
+  if (!asset) {
+    res.status(404).json({ error: "Asset not found" });
+    return;
+  }
+
+  if (asset.status !== "approved") {
+    res.status(409).json({ error: "Asset must be approved before deposit" });
+    return;
+  }
+
+  if (asset.mintedAt != null) {
+    res.status(409).json({ error: "Asset has already been deposited" });
+    return;
+  }
+
+  const [owner] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, asset.userId))
+    .limit(1);
+
+  if (!owner) {
+    res.status(404).json({ error: "Asset owner not found" });
+    return;
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Atomic claim: only one request can flip an approved, not-yet-minted
+      // asset to minted. Concurrent/duplicate calls find no matching row.
+      const [claimed] = await tx
+        .update(assetsTable)
+        .set({ mintedAt: new Date() })
+        .where(
+          and(
+            eq(assetsTable.id, id),
+            eq(assetsTable.status, "approved"),
+            isNull(assetsTable.mintedAt),
+          ),
+        )
+        .returning();
+
+      // Lost the race (another request already claimed it).
+      if (!claimed) return null;
+
+      // Ensure the owner has a linked Matrix account to receive gravity.
+      const targetWallet = await ensureUserMatrixAccount(owner, tx);
+
+      const claimedValue = parseFloat(claimed.claimedValue);
+      const { splits } = await mintGravity(
+        {
+          inrValue: claimedValue,
+          assetTitle: claimed.description,
+          targetWallet,
+        },
+        tx,
+      );
+
+      // The owner's share (growth) is what lands in their wallet.
+      const gravityIssued = splits.growth;
+
+      // Lock a custody ledger entry for the deposited asset (encrypted at rest).
+      await tx.insert(custodyLedgerTable).values({
+        ownerAccount: targetWallet,
+        assetType: claimed.assetType,
+        valuationEncrypted: encrypt(claimedValue.toString()),
+        descriptionEncrypted: encrypt(claimed.description),
+        status: "LOCKED",
+      });
+
+      const [updated] = await tx
+        .update(assetsTable)
+        .set({ gravityIssued: gravityIssued.toFixed(6) })
+        .where(eq(assetsTable.id, id))
+        .returning();
+
+      return { updated, targetWallet, gravityIssued };
+    });
+
+    if (!result) {
+      res.status(409).json({ error: "Asset has already been deposited" });
+      return;
+    }
+
+    req.log.info(
+      { assetId: id, targetWallet: result.targetWallet, gravityIssued: result.gravityIssued },
+      "Asset deposited and gravity issued",
+    );
+
+    const { updated } = result;
+    res.json({
+      ...updated,
+      claimedValue: parseFloat(updated.claimedValue),
+      feeAmount:
+        updated.feeAmount != null ? parseFloat(updated.feeAmount) : null,
+      gravityIssued:
+        updated.gravityIssued != null
+          ? parseFloat(updated.gravityIssued)
+          : null,
+    });
+  } catch (err) {
+    req.log.error({ err, assetId: id }, "Deposit failed; transaction rolled back");
+    res.status(500).json({ error: "Deposit failed" });
+  }
 });
 
 router.get("/admin/stats", async (req, res): Promise<void> => {

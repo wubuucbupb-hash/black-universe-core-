@@ -5,12 +5,15 @@
  * Asset verification platform API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserRole } from './userRole';
 
 export interface User {
   id: number;
   name: string;
   email: string;
-  role: UserRole;
+  role: string;
+  /** @nullable */
+  phoneNumber?: string | null;
+  /** @nullable */
+  accountNumber?: string | null;
   createdAt: Date;
 }

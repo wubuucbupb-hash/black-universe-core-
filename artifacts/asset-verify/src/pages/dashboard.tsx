@@ -60,6 +60,8 @@ export default function Dashboard() {
   const allAccounts: any[] = matrixData?.accounts ?? [];
   const systemAccounts = allAccounts.filter((a: any) => SYSTEM_CORES.includes(a.accountNumber));
   const citizens = allAccounts.filter((a: any) => !SYSTEM_CORES.includes(a.accountNumber));
+  const myAccount = allAccounts.find((a: any) => a.accountNumber === user?.accountNumber);
+  const myGravity = myAccount ? Number(myAccount.gravityBalance) : 0;
 
   function fmtG(n: number | string) {
     return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -163,33 +165,35 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                Total Declared Value
+                Total Asset Value
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isSummaryLoading ? (
                 <Skeleton className="h-10 w-32" />
               ) : (
-                <div className="text-4xl font-serif font-semibold text-primary">
+                <div className="text-4xl font-serif font-semibold text-primary" data-testid="text-total-asset-value">
                   {formatCurrency(summary?.totalClaimedValue || 0)}
                 </div>
               )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Combined value of all declared assets
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                Verified Value
+                Your Gravity Balance
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {isSummaryLoading ? (
-                <Skeleton className="h-10 w-32" />
-              ) : (
-                <div className="text-4xl font-serif font-semibold text-green-600">
-                  {formatCurrency(summary?.totalApprovedValue || 0)}
-                </div>
-              )}
+              <div className="text-4xl font-serif font-semibold text-cyan-600" data-testid="text-gravity-balance">
+                {fmtG(myGravity)} <span className="text-2xl">G</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 font-mono">
+                {user.accountNumber ? `Wallet ${user.accountNumber}` : "No wallet linked"}
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -408,7 +412,16 @@ export default function Dashboard() {
                         <TableCell className="font-serif">
                           {formatCurrency(asset.claimedValue)}
                         </TableCell>
-                        <TableCell>{getStatusBadge(asset.status)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {getStatusBadge(asset.status)}
+                            {asset.mintedAt && (
+                              <Badge className="bg-cyan-600 hover:bg-cyan-700 w-fit">
+                                Minted{asset.gravityIssued != null ? ` · ${fmtG(asset.gravityIssued)} G` : ""}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-muted-foreground">
                           {formatDate(asset.createdAt)}
                         </TableCell>

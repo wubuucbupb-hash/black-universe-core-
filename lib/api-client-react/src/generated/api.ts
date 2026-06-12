@@ -139,9 +139,9 @@ export const getRegisterUserUrl = () => {
 /**
  * @summary Register a new user
  */
-export const registerUser = async (userRegistration: UserRegistration, options?: RequestInit): Promise<User> => {
+export const registerUser = async (userRegistration: UserRegistration, options?: RequestInit): Promise<AuthResponse> => {
 
-  return customFetch<User>(getRegisterUserUrl(),
+  return customFetch<AuthResponse>(getRegisterUserUrl(),
   {
     ...options,
     method: 'POST',
@@ -1013,6 +1013,76 @@ export const useRejectAsset = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRejectAssetMutationOptions(options));
+    }
+
+export const getDepositAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/assets/${id}/deposit`
+}
+
+/**
+ * @summary Admin - second verification; issue gravity for an approved asset
+ */
+export const depositAsset = async (id: number, options?: RequestInit): Promise<Asset> => {
+
+  return customFetch<Asset>(getDepositAssetUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDepositAssetMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof depositAsset>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof depositAsset>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['depositAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof depositAsset>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  depositAsset(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DepositAssetMutationResult = NonNullable<Awaited<ReturnType<typeof depositAsset>>>
+
+    export type DepositAssetMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Admin - second verification; issue gravity for an approved asset
+ */
+export const useDepositAsset = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof depositAsset>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof depositAsset>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDepositAssetMutationOptions(options));
     }
 
 export const getGetAdminStatsUrl = () => {

@@ -8,6 +8,7 @@ import {
   getAdminListAssetsQueryKey,
   useApproveAsset,
   useRejectAsset,
+  useDepositAsset,
   useAdminListUsers,
   getAdminListUsersQueryKey,
 } from "@workspace/api-client-react";
@@ -96,6 +97,7 @@ export default function Admin() {
 
   const approveAsset = useApproveAsset();
   const rejectAsset = useRejectAsset();
+  const depositAsset = useDepositAsset();
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -196,6 +198,34 @@ export default function Admin() {
           toast({
             title: "Error",
             description: msg || "Failed to reject asset.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  const handleDeposit = (id: number) => {
+    depositAsset.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getAdminListAssetsQueryKey(),
+          });
+          queryClient.invalidateQueries({
+            queryKey: getGetAdminStatsQueryKey(),
+          });
+          toast({
+            title: "Asset Deposited & Minted",
+            description: "Gravity has been issued and locked into custody.",
+          });
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { error?: string })?.error;
+          toast({
+            title: "Error",
+            description: msg || "Failed to deposit asset.",
             variant: "destructive",
           });
         },
@@ -406,12 +436,35 @@ export default function Admin() {
                           {formatCurrency(asset.claimedValue)}
                         </td>
                         <td className="px-4 py-2 align-top">
-                          {getStatusBadge(asset.status)}
+                          <div className="flex flex-col gap-1">
+                            {getStatusBadge(asset.status)}
+                            {asset.mintedAt && (
+                              <Badge className="bg-cyan-600 hover:bg-cyan-700 w-fit">
+                                Minted{asset.gravityIssued != null ? ` · ${asset.gravityIssued} G` : ""}
+                              </Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-2 text-zinc-600 align-top">
                           {formatDate(asset.createdAt)}
                         </td>
                         <td className="px-4 py-2 text-right align-top">
+                          {asset.status === "approved" && !asset.mintedAt && (
+                            <Button
+                              size="sm"
+                              className="bg-cyan-600 hover:bg-cyan-500 text-white"
+                              onClick={() => handleDeposit(asset.id)}
+                              disabled={depositAsset.isPending}
+                              data-testid={`button-deposit-${asset.id}`}
+                            >
+                              <DollarSign className="h-4 w-4 mr-1" /> Deposit & Mint
+                            </Button>
+                          )}
+                          {asset.status === "approved" && asset.mintedAt && (
+                            <span className="text-cyan-400 text-xs font-mono">
+                              ✓ Minted
+                            </span>
+                          )}
                           {asset.status === "pending" && (
                             <div className="flex justify-end gap-2">
                               <Button

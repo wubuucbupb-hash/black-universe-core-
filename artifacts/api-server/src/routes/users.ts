@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { timingSafeEqual } from "crypto";
 import { db, usersTable } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
+import { provisionCitizenAccount } from "../lib/matrixEngine";
 
 const router = Router();
 
@@ -60,8 +61,20 @@ router.post("/users/register", async (req, res): Promise<void> => {
       .values({ name, email, phoneNumber: phoneNumber ?? null, passwordHash, role: "citizen" })
       .returning();
 
+    // Auto-provision a linked Matrix account so gravity can later be issued.
+    const accountNumber = await provisionCitizenAccount({
+      name: name || email,
+      phone: phoneNumber,
+      email,
+    });
+    const [linkedUser] = await db
+      .update(usersTable)
+      .set({ accountNumber })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+
     req.session.userId = user.id;
-    res.status(201).json({ user: userResponse(user) });
+    res.status(201).json({ user: userResponse(linkedUser) });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Registration failed";
     res.status(500).json({ error: msg });

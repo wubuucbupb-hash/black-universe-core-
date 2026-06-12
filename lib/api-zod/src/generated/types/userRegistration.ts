@@ -12,4 +12,6 @@ export interface UserRegistration {
   email: string;
   /** @minLength 6 */
   password: string;
+  /** @nullable */
+  phoneNumber?: string | null;
 }

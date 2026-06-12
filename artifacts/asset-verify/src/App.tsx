@@ -233,7 +233,7 @@ function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: "📊 Dashboard", sub: "Portfolio & Assets", path: "/dashboard", style: "border-zinc-700 hover:border-zinc-500" },
-              { label: "🔥 Matrix Engine", sub: "Mint · Transfer · Register", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
+              { label: "🔥 Matrix Engine", sub: "Mint · P2P Transfer", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
               { label: "🏛️ Custody Vault", sub: "Lock · Escrow · Release", path: "/vault", style: "border-yellow-500/40 hover:border-yellow-500" },
               { label: "🛠️ Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" },
             ].map((btn) => (
@@ -301,7 +301,7 @@ function Home() {
           >
             🔥 Matrix Engine
           </button>
-          <p className="text-[10px] text-zinc-600 font-mono text-center">Citizen Registration · Mint · P2P Transfer</p>
+          <p className="text-[10px] text-zinc-600 font-mono text-center">Mint · P2P Transfer</p>
         </div>
 
         {/* Admin */}
