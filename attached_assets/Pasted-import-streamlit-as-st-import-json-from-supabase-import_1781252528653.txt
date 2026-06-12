@@ -1,0 +1,77 @@
+import streamlit as st
+import json
+from supabase import create_client
+
+# --- 1. CONFIGURATION ---
+SUPABASE_URL = "https://xycrfjrtoevermkxqnbe.supabase.co"
+SUPABASE_KEY = "sb_publishable_qPtCB9lxQlPV62o4f9gvNg_RGoNDn5z"
+supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- 2. STORAGE ENGINE ---
+def load_system_data():
+    try:
+        response = supabase_client.table("bu_ledger").select("*").execute()
+        matrix = {row["account_number"]: json.loads(row["data"]) for row in response.data} if response.data else {}
+        return {"matrix_db": matrix}
+    except:
+        return {"matrix_db": {}}
+
+def save_system_data(acc_num, data):
+    supabase_client.table("bu_ledger").upsert({
+        "account_number": acc_num, 
+        "data": json.dumps(data)
+    }).execute()
+
+# --- 3. SESSION INITIALIZATION ---
+if 'matrix_db' not in st.session_state:
+    st.session_state.matrix_db = load_system_data()["matrix_db"]
+    st.session_state.cluster_counters = {"7": 1}
+
+# --- 4. UI & GOVERNANCE LOGIC ---
+st.set_page_config(page_title="BlackUniverse Matrix Engine", layout="wide")
+st.title("🌌 BlackUniverse.world — Auto-Pilot Matrix Engine")
+
+# A. AUTO-REGISTRATION (Autonomous - No Approval Needed)
+with st.expander("👤 Auto-Register Citizen"):
+    u_name = st.text_input("Name")
+    # Redacted ID handling as per protocol
+    id_ref = st.text_input("ID Proof (Redacted)", type="password") 
+    phone = st.text_input("Phone Number")
+    
+    if st.button("🚀 Register Citizen"):
+        acc = "7000" + str(st.session_state.cluster_counters["7"]).zfill(9)
+        # Status set to ACTIVE by default for auto-flow
+        user_data = {
+            "name": u_name, 
+            "gravity": 0.0, 
+            "status": "ACTIVE", 
+            "id_ref": "[Aadhaar Redacted]"
+        }
+        st.session_state.matrix_db[acc] = user_data
+        st.session_state.cluster_counters["7"] += 1
+        save_system_data(acc, user_data)
+        st.success(f"Citizen Registered Successfully! Acc: {acc}")
+
+# B. FOUNDER-ONLY MINTING (Strict Control)
+st.subheader("🛠️ Founder Authority Zone")
+asset_val = st.number_input("Asset Valuation (INR)", step=10000.0)
+
+# Sirf Founder account access kar sakta hai
+if st.button("🔥 EXECUTE SYSTEM MINT (Founder Authorized)"):
+    gravity = asset_val / 10000.0
+    
+    # 1% Founder Tax
+    founder_tax = gravity * 0.01
+    st.session_state.matrix_db["1111111111111"]["gravity"] += founder_tax
+    
+    # Logic: Distribute remaining 99% to pools (Reserve, Stability, Security, Growth)
+    # Save Founder Wallet
+    save_system_data("1111111111111", st.session_state.matrix_db["1111111111111"])
+    st.success("✅ Minting Process Auto-Executed with Founder Tax Deduction.")
+
+# C. P2P AUTO-TRANSFER
+st.subheader("💸 P2P Auto-Transfer")
+if st.button("⚡ Quick Transfer"):
+    # Autonomous logic for peer transfers
+    st.write("Transfer processed via System Logic.")
+    save_system_data("1111111111111", st.session_state.matrix_db["1111111111111"])
