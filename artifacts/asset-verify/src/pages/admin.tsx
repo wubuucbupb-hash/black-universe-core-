@@ -34,7 +34,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2,
@@ -82,6 +82,50 @@ export default function Admin() {
 
   const approveAsset = useApproveAsset();
   const rejectAsset = useRejectAsset();
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const { data: matrixAccounts } = useQuery({
+    queryKey: ["admin-matrix-accounts"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/matrix/accounts`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: user?.role === "admin",
+    refetchInterval: 6000,
+  });
+
+  const { data: custodyData } = useQuery({
+    queryKey: ["admin-custody-vault"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/custody/vault`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: user?.role === "admin",
+    refetchInterval: 8000,
+  });
+
+  const { data: matrixTxns } = useQuery({
+    queryKey: ["admin-matrix-txns"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/matrix/logs`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: user?.role === "admin",
+    refetchInterval: 6000,
+  });
+
+  function fmtG(n: number | string) {
+    return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const SYSTEM_CORES = ["000000000000","111111111111","222222222222","333333333333","444444444444","555555555555","666666666666","777777777777","888888888888","999999999999"];
+  const allAccounts: any[] = matrixAccounts?.accounts ?? [];
+  const custodyEntries: any[] = custodyData?.entries ?? [];
+  const txnLogs: any[] = matrixTxns?.logs ?? [];
 
   if (isAuthLoading) return null;
 
@@ -250,9 +294,12 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="assets" className="w-full">
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 flex-wrap h-auto gap-1">
             <TabsTrigger value="assets">Asset Registry</TabsTrigger>
             <TabsTrigger value="users">User Profiles</TabsTrigger>
+            <TabsTrigger value="matrix">🌌 Matrix Accounts</TabsTrigger>
+            <TabsTrigger value="custody">🏛️ Custody Ledger</TabsTrigger>
+            <TabsTrigger value="txns">⚡ Transactions</TabsTrigger>
           </TabsList>
 
           <TabsContent
@@ -454,6 +501,133 @@ export default function Admin() {
               </Table>
             )}
           </TabsContent>
+          {/* ── MATRIX ACCOUNTS TAB ── */}
+          <TabsContent value="matrix" className="rounded-xl overflow-hidden border border-zinc-800">
+            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+              <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">🌌 MATRIX ACCOUNTS DATABASE — {allAccounts.length} RECORDS</span>
+            </div>
+            <div className="bg-[#0a0a0a] overflow-x-auto">
+              {allAccounts.length === 0 ? (
+                <div className="p-8 text-center text-zinc-600 font-mono text-sm">Loading accounts...</div>
+              ) : (
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500">
+                      <th className="text-left px-4 py-2">ACCOUNT #</th>
+                      <th className="text-left px-4 py-2">NAME</th>
+                      <th className="text-left px-4 py-2">TYPE</th>
+                      <th className="text-left px-4 py-2">CLUSTER</th>
+                      <th className="text-right px-4 py-2">GRAVITY BALANCE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allAccounts.map((acc: any) => {
+                      const isSys = SYSTEM_CORES.includes(acc.accountNumber);
+                      const isFounder = acc.accountNumber === "111111111111";
+                      return (
+                        <tr key={acc.accountNumber} className={`border-b border-zinc-900 ${isFounder ? "bg-emerald-500/5" : isSys ? "bg-zinc-900/40" : "bg-cyan-500/5"}`}>
+                          <td className={`px-4 py-2 font-bold ${isFounder ? "text-emerald-400" : isSys ? "text-red-400" : "text-cyan-400"}`}>{acc.accountNumber}</td>
+                          <td className="px-4 py-2 text-white">{acc.name}</td>
+                          <td className="px-4 py-2 text-zinc-400">{acc.type}</td>
+                          <td className="px-4 py-2 text-zinc-500">{acc.cluster ?? "—"}</td>
+                          <td className={`px-4 py-2 text-right font-bold ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
+                            {fmtG(acc.gravityBalance)} G
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── CUSTODY LEDGER TAB ── */}
+          <TabsContent value="custody" className="rounded-xl overflow-hidden border border-zinc-800">
+            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+              <span className="text-yellow-400 text-xs font-mono font-bold tracking-widest">🏛️ CUSTODY LEDGER — {custodyEntries.length} ENTRIES (DECRYPTED)</span>
+            </div>
+            <div className="bg-[#0a0a0a] overflow-x-auto">
+              {custodyEntries.length === 0 ? (
+                <div className="p-8 text-center text-zinc-600 font-mono text-sm">No custody entries yet. Lock or escrow assets from the Vault.</div>
+              ) : (
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500">
+                      <th className="text-left px-4 py-2">ID</th>
+                      <th className="text-left px-4 py-2">ASSET TYPE</th>
+                      <th className="text-left px-4 py-2">DESCRIPTION</th>
+                      <th className="text-right px-4 py-2">VALUATION</th>
+                      <th className="text-left px-4 py-2">STATUS</th>
+                      <th className="text-left px-4 py-2">SENDER → RECEIVER</th>
+                      <th className="text-left px-4 py-2">DATE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {custodyEntries.map((e: any) => (
+                      <tr key={e.id} className="border-b border-zinc-900">
+                        <td className="px-4 py-2 text-zinc-500">{e.id}</td>
+                        <td className="px-4 py-2 text-cyan-400">{e.assetType ?? "—"}</td>
+                        <td className="px-4 py-2 text-zinc-300 max-w-[180px] truncate">{e.description ?? "—"}</td>
+                        <td className="px-4 py-2 text-right text-green-400 font-bold">{e.valuation ? fmtG(e.valuation) + " G" : "—"}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${e.status === "LOCKED" ? "bg-yellow-500/20 text-yellow-400" : e.status === "RELEASED" ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-400"}`}>
+                            {e.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-zinc-500">{e.senderAccount ?? "—"} {e.receiverAccount ? `→ ${e.receiverAccount}` : ""}</td>
+                        <td className="px-4 py-2 text-zinc-600">{e.createdAt ? new Date(e.createdAt).toLocaleDateString("en-IN") : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── TRANSACTIONS TAB ── */}
+          <TabsContent value="txns" className="rounded-xl overflow-hidden border border-zinc-800">
+            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+              <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">⚡ MATRIX TRANSACTION LOG — {txnLogs.length} RECORDS</span>
+            </div>
+            <div className="bg-[#0a0a0a] overflow-x-auto">
+              {txnLogs.length === 0 ? (
+                <div className="p-8 text-center text-zinc-600 font-mono text-sm">No transactions yet.</div>
+              ) : (
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500">
+                      <th className="text-left px-4 py-2">ID</th>
+                      <th className="text-left px-4 py-2">TYPE</th>
+                      <th className="text-left px-4 py-2">FROM</th>
+                      <th className="text-left px-4 py-2">TO</th>
+                      <th className="text-right px-4 py-2">AMOUNT (G)</th>
+                      <th className="text-left px-4 py-2">NOTE</th>
+                      <th className="text-left px-4 py-2">DATE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {txnLogs.map((t: any) => (
+                      <tr key={t.id} className="border-b border-zinc-900">
+                        <td className="px-4 py-2 text-zinc-500">{t.id}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.type === "MINT" ? "bg-cyan-500/20 text-cyan-400" : t.type === "TRANSFER" ? "bg-purple-500/20 text-purple-400" : "bg-zinc-700 text-zinc-400"}`}>
+                            {t.type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-zinc-400">{t.fromAccount ?? "SYSTEM"}</td>
+                        <td className="px-4 py-2 text-zinc-400">{t.toAccount ?? "—"}</td>
+                        <td className="px-4 py-2 text-right text-green-400 font-bold">{fmtG(t.amount)}</td>
+                        <td className="px-4 py-2 text-zinc-500 max-w-[160px] truncate">{t.note ?? "—"}</td>
+                        <td className="px-4 py-2 text-zinc-600">{t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-IN") : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </TabsContent>
+
         </Tabs>
       </div>
     </Layout>

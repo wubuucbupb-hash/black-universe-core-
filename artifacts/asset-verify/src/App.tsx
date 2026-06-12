@@ -315,15 +315,26 @@ function Home() {
           </button>
         </div>
 
-        {/* Login */}
-        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
-          <p className="text-xs text-zinc-500 font-mono tracking-widest text-center">CITIZEN LOGIN</p>
-          <button
-            onClick={() => setLocation("/dashboard")}
-            className="w-full py-3 bg-zinc-800 text-zinc-300 font-bold rounded-md hover:bg-zinc-700 transition-all text-base"
-          >
-            👤 Citizen Portal (Log In)
-          </button>
+        {/* Login + Vault row */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
+            <p className="text-[10px] text-zinc-500 font-mono tracking-widest text-center">CITIZEN LOGIN</p>
+            <button
+              onClick={() => setLocation("/dashboard")}
+              className="w-full py-2.5 bg-zinc-800 text-zinc-300 font-bold rounded-md hover:bg-zinc-700 transition-all text-sm"
+            >
+              👤 Log In
+            </button>
+          </div>
+          <div className="p-3 bg-zinc-900 border border-yellow-500/30 rounded-lg space-y-1.5">
+            <p className="text-[10px] text-yellow-600 font-mono tracking-widest text-center">CUSTODY VAULT</p>
+            <button
+              onClick={() => setLocation("/vault")}
+              className="w-full py-2.5 bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 font-bold rounded-md hover:bg-yellow-500/20 transition-all text-sm"
+            >
+              🏛️ Open Vault
+            </button>
+          </div>
         </div>
 
         {/* Register */}
