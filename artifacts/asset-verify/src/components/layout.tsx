@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "./auth-provider";
 import { useLogoutUser } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, LogOut, LayoutDashboard, FilePlus, ShieldAlert } from "lucide-react";
+import { ShieldCheck, LogOut, LayoutDashboard, FilePlus, ShieldAlert, Database, Zap, Lock } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, setUser } = useAuth();
@@ -27,39 +27,73 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-serif text-xl font-bold tracking-tight text-cyan-400">Black Universe</span>
           </Link>
 
-          {user && (
-            <nav className="flex items-center gap-4">
-              <Link href="/dashboard">
-                <Button variant="ghost" className="gap-2 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-dashboard">
-                  <LayoutDashboard className="h-4 w-4" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Link href="/submit">
-                <Button variant="ghost" className="gap-2 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-submit">
-                  <FilePlus className="h-4 w-4" />
-                  Declare Asset
-                </Button>
-              </Link>
-              {user.role === "admin" && (
-                <Link href="/admin">
-                  <Button variant="ghost" className="gap-2 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-admin">
-                    <ShieldAlert className="h-4 w-4" />
-                    Admin
+          <nav className="flex items-center gap-1">
+            {/* Matrix Engine — always visible */}
+            <Link href="/matrix">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-400 hover:text-cyan-100 hover:bg-cyan-950/50 font-mono text-xs">
+                <Zap className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Matrix</span>
+              </Button>
+            </Link>
+
+            {user ? (
+              <>
+                <Link href="/dashboard">
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-dashboard">
+                    <LayoutDashboard className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Dashboard</span>
                   </Button>
                 </Link>
-              )}
-              <div className="h-6 w-px bg-cyan-900 mx-2" />
-              <div className="flex flex-col text-right mr-2 hidden md:block">
-                <span className="text-sm font-medium leading-none text-cyan-100">{user.name}</span>
-                <span className="text-xs text-cyan-500">{user.email}</span>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleLogout} disabled={logout.isPending} className="border-cyan-800 text-cyan-300 hover:bg-cyan-950 hover:text-cyan-100" data-testid="button-logout">
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </nav>
-          )}
+
+                <Link href="/vault">
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-yellow-400 hover:text-yellow-200 hover:bg-yellow-950/30">
+                    <Lock className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Vault</span>
+                  </Button>
+                </Link>
+
+                <Link href="/submit">
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-submit">
+                    <FilePlus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Declare</span>
+                  </Button>
+                </Link>
+
+                {user.role === "admin" && (
+                  <>
+                    <Link href="/admin">
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-admin">
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Admin</span>
+                      </Button>
+                    </Link>
+                    <Link href="/admin#matrix">
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-emerald-400 hover:text-emerald-200 hover:bg-emerald-950/30" title="Database Viewer">
+                        <Database className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">DB</span>
+                      </Button>
+                    </Link>
+                  </>
+                )}
+
+                <div className="h-5 w-px bg-cyan-900 mx-1" />
+                <div className="flex-col text-right mr-1 hidden md:flex">
+                  <span className="text-xs font-medium leading-none text-cyan-100">{user.name}</span>
+                  <span className="text-[10px] text-cyan-600">{user.role === "admin" ? "👑 Founder" : "Citizen"}</span>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleLogout} disabled={logout.isPending} className="border-cyan-800 text-cyan-400 hover:bg-cyan-950 hover:text-cyan-100 text-xs" data-testid="button-logout">
+                  <LogOut className="h-3.5 w-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </Button>
+              </>
+            ) : (
+              <Link href="/dashboard">
+                <Button size="sm" className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs">
+                  Log In
+                </Button>
+              </Link>
+            )}
+          </nav>
         </div>
       </header>
       <main className="flex-1">

@@ -293,13 +293,13 @@ export default function Admin() {
           </Card>
         </div>
 
-        <Tabs defaultValue="assets" className="w-full">
+        <Tabs defaultValue="matrix" className="w-full">
           <TabsList className="mb-4 flex-wrap h-auto gap-1">
-            <TabsTrigger value="assets">Asset Registry</TabsTrigger>
-            <TabsTrigger value="users">User Profiles</TabsTrigger>
             <TabsTrigger value="matrix">🌌 Matrix Accounts</TabsTrigger>
             <TabsTrigger value="custody">🏛️ Custody Ledger</TabsTrigger>
             <TabsTrigger value="txns">⚡ Transactions</TabsTrigger>
+            <TabsTrigger value="assets">Asset Registry</TabsTrigger>
+            <TabsTrigger value="users">Portal Users</TabsTrigger>
           </TabsList>
 
           <TabsContent
