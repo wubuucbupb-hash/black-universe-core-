@@ -45,6 +45,26 @@ export default function Dashboard() {
     refetchInterval: 10000,
   });
 
+  const { data: matrixData } = useQuery({
+    queryKey: ["matrix-accounts"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/matrix/accounts`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!user,
+    refetchInterval: 8000,
+  });
+
+  const SYSTEM_CORES = ["000000000000","111111111111","222222222222","333333333333","444444444444","555555555555","666666666666","777777777777","888888888888","999999999999"];
+  const allAccounts: any[] = matrixData?.accounts ?? [];
+  const systemAccounts = allAccounts.filter((a: any) => SYSTEM_CORES.includes(a.accountNumber));
+  const citizens = allAccounts.filter((a: any) => !SYSTEM_CORES.includes(a.accountNumber));
+
+  function fmtG(n: number | string) {
+    return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   const { data: summary, isLoading: isSummaryLoading } = useGetMyAssetSummary({
     query: {
       queryKey: getGetMyAssetSummaryQueryKey(),
@@ -209,31 +229,122 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Vault Status Banner */}
-        <div
-          onClick={() => setLocation("/vault")}
-          className="cursor-pointer flex items-center justify-between p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 hover:bg-yellow-500/10 transition-all mb-6"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🏛️</span>
-            <div>
-              <div className="text-yellow-400 font-bold text-sm tracking-wide">CUSTODY VAULT STATUS</div>
-              <div className="text-zinc-400 text-xs font-mono mt-0.5">
-                {vaultSummary
-                  ? `${vaultSummary.locked} Locked · ${vaultSummary.released} Released · ${vaultSummary.total} Total Entries`
-                  : "Loading vault data..."}
+        {/* ── BLACK UNIVERSE MATRIX ENGINE WIDGET ── */}
+        <div className="bg-[#0a0a0a] border border-zinc-800 rounded-xl mb-8 overflow-hidden">
+          {/* Widget Header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 bg-black">
+            <div className="flex items-center gap-2">
+              <span className="text-cyan-400 text-base">🌌</span>
+              <span className="text-cyan-400 font-bold font-mono text-sm tracking-widest">BLACK UNIVERSE MATRIX ENGINE</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLocation("/matrix")}
+                className="px-3 py-1 text-[11px] font-bold font-mono bg-cyan-500 hover:bg-cyan-400 text-black rounded transition-all"
+              >
+                OPEN MATRIX →
+              </button>
+              <button
+                onClick={() => setLocation("/vault")}
+                className="px-3 py-1 text-[11px] font-bold font-mono bg-yellow-500 hover:bg-yellow-400 text-black rounded transition-all"
+              >
+                🏛️ VAULT
+              </button>
+            </div>
+          </div>
+
+          {/* Live Stats Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-zinc-800 border-b border-zinc-800">
+            {[
+              { label: "SYSTEM POOLS", value: systemAccounts.length, color: "text-cyan-400" },
+              { label: "CITIZENS", value: citizens.length, color: "text-white" },
+              { label: "VAULT LOCKED", value: vaultSummary?.locked ?? 0, color: "text-yellow-400" },
+              { label: "VAULT RELEASED", value: vaultSummary?.released ?? 0, color: "text-emerald-400" },
+            ].map((s) => (
+              <div key={s.label} className="p-3 text-center">
+                <div className="text-zinc-600 text-[9px] font-mono tracking-widest">{s.label}</div>
+                <div className={`text-xl font-bold font-mono ${s.color} mt-0.5`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pool Balances Grid */}
+          <div className="p-4">
+            <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-3">🔒 GENESIS SYSTEM POOLS — LIVE BALANCES</div>
+            {systemAccounts.length === 0 ? (
+              <div className="text-zinc-700 text-xs font-mono text-center py-4">Loading pool data...</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {systemAccounts.map((acc: any) => {
+                  const isFounder = acc.accountNumber === "111111111111";
+                  const isSystem = acc.accountNumber === "000000000000";
+                  return (
+                    <div
+                      key={acc.accountNumber}
+                      className={`rounded-lg px-3 py-2 border ${isFounder ? "border-emerald-500/40 bg-emerald-500/5" : isSystem ? "border-red-500/30 bg-red-500/5" : "border-zinc-800 bg-zinc-900/50"}`}
+                    >
+                      <div className={`text-[9px] font-mono font-bold tracking-widest ${isFounder ? "text-emerald-400" : isSystem ? "text-red-400" : "text-cyan-500"}`}>
+                        {acc.type.toUpperCase()}
+                      </div>
+                      <div className="text-white text-xs font-semibold truncate leading-tight mt-0.5">{acc.name.replace("Black Universe — ", "")}</div>
+                      <div className="text-zinc-500 text-[10px] font-mono">{acc.accountNumber}</div>
+                      <div className={`text-sm font-bold font-mono mt-1 ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
+                        {fmtG(acc.gravityBalance)} G
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Citizens Row */}
+            {citizens.length > 0 && (
+              <div className="mt-4">
+                <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-2">👥 REGISTERED CITIZENS ({citizens.length})</div>
+                <div className="flex flex-wrap gap-2">
+                  {citizens.map((c: any) => (
+                    <div key={c.accountNumber} className="border border-cyan-500/20 rounded-md px-3 py-1.5 bg-cyan-500/5">
+                      <div className="text-white text-xs font-semibold">{c.name}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-zinc-500 text-[10px] font-mono">{c.accountNumber}</span>
+                        <span className={`text-[11px] font-bold font-mono ${Number(c.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
+                          {fmtG(c.gravityBalance)} G
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Vault Status Banner */}
+            <div
+              onClick={() => setLocation("/vault")}
+              className="cursor-pointer flex items-center justify-between mt-4 p-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 hover:bg-yellow-500/10 transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏛️</span>
+                <div>
+                  <div className="text-yellow-400 font-bold text-xs font-mono tracking-wide">CUSTODY VAULT STATUS</div>
+                  <div className="text-zinc-500 text-[10px] font-mono mt-0.5">
+                    {vaultSummary
+                      ? `${vaultSummary.locked} Locked · ${vaultSummary.released} Released · ${vaultSummary.total} Total Entries`
+                      : "Loading..."}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {vaultSummary?.locked > 0 && (
+                  <span className="text-yellow-400 font-bold text-xs font-mono border border-yellow-500/40 px-2 py-0.5 rounded">
+                    🔒 {vaultSummary.locked} LOCKED
+                  </span>
+                )}
+                <span className="text-zinc-600 text-[10px] font-mono">Open →</span>
               </div>
             </div>
           </div>
-          <div className="text-right">
-            {vaultSummary && vaultSummary.locked > 0 && (
-              <div className="text-yellow-400 font-bold text-sm font-mono">
-                🔒 {vaultSummary.locked} LOCKED
-              </div>
-            )}
-            <div className="text-zinc-500 text-xs font-mono mt-0.5">Click to open vault →</div>
-          </div>
         </div>
+        {/* ── END MATRIX ENGINE WIDGET ── */}
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
