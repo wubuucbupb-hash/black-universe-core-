@@ -30,8 +30,12 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const forgotPasswordSchema = z.object({
+const forgotRequestSchema = z.object({
   email: z.string().email("Invalid email address"),
+});
+
+const forgotConfirmSchema = z.object({
+  token: z.string().min(1, "Reset code is required"),
   newPassword: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -42,6 +46,7 @@ export default function Login() {
   const login = useLoginUser();
   const [showForgot, setShowForgot] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [resetStep, setResetStep] = useState<"request" | "confirm">("request");
 
   useEffect(() => {
     if (user) setLocation("/dashboard");
@@ -52,10 +57,21 @@ export default function Login() {
     defaultValues: { email: "", password: "" },
   });
 
-  const forgotForm = useForm<z.infer<typeof forgotPasswordSchema>>({
-    resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: { email: "", newPassword: "" },
+  const requestForm = useForm<z.infer<typeof forgotRequestSchema>>({
+    resolver: zodResolver(forgotRequestSchema),
+    defaultValues: { email: "" },
   });
+
+  const confirmForm = useForm<z.infer<typeof forgotConfirmSchema>>({
+    resolver: zodResolver(forgotConfirmSchema),
+    defaultValues: { token: "", newPassword: "" },
+  });
+
+  const resetForgotFlow = () => {
+    setResetStep("request");
+    requestForm.reset();
+    confirmForm.reset();
+  };
 
   const onSubmit = (values: z.infer<typeof loginSchema>) => {
     login.mutate(
@@ -76,8 +92,42 @@ export default function Login() {
     );
   };
 
-  const onForgotSubmit = async (
-    values: z.infer<typeof forgotPasswordSchema>,
+  const onRequestSubmit = async (
+    values: z.infer<typeof forgotRequestSchema>,
+  ) => {
+    setIsResetting(true);
+    try {
+      const response = await fetch("/api/users/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: values.email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Request failed");
+      toast({
+        title: "Reset code issued",
+        description:
+          data.token != null
+            ? "A reset code was generated. Enter it below to set a new password."
+            : "If an account matches, a reset code has been issued. Enter it below.",
+      });
+      // In development/preview the server returns the token so the flow is
+      // self-serve; prefill it. In production it arrives out-of-band.
+      confirmForm.reset({ token: data.token ?? "", newPassword: "" });
+      setResetStep("confirm");
+    } catch (err: any) {
+      toast({
+        title: "Request Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const onConfirmSubmit = async (
+    values: z.infer<typeof forgotConfirmSchema>,
   ) => {
     setIsResetting(true);
     try {
@@ -85,7 +135,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: values.email,
+          token: values.token,
           password: values.newPassword,
         }),
       });
@@ -96,7 +146,7 @@ export default function Login() {
         description: "Password updated successfully!",
       });
       setShowForgot(false);
-      forgotForm.reset();
+      resetForgotFlow();
     } catch (err: any) {
       toast({
         title: "Reset Failed",
@@ -167,40 +217,85 @@ export default function Login() {
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
           </DialogHeader>
-          <Form {...forgotForm}>
-            <form
-              onSubmit={forgotForm.handleSubmit(onForgotSubmit)}
-              className="space-y-4"
-            >
-              <FormField
-                control={forgotForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input type="email" {...field} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={forgotForm.control}
-                name="newPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>New Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" {...field} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" disabled={isResetting}>
-                Update Password
-              </Button>
-            </form>
-          </Form>
+          {resetStep === "request" ? (
+            <Form {...requestForm}>
+              <form
+                onSubmit={requestForm.handleSubmit(onRequestSubmit)}
+                className="space-y-4"
+              >
+                <p className="text-sm text-muted-foreground">
+                  Enter your email and we'll issue a one-time reset code.
+                </p>
+                <FormField
+                  control={requestForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit" disabled={isResetting}>
+                  Send Reset Code
+                </Button>
+              </form>
+            </Form>
+          ) : (
+            <Form {...confirmForm}>
+              <form
+                onSubmit={confirmForm.handleSubmit(onConfirmSubmit)}
+                className="space-y-4"
+              >
+                <p className="text-sm text-muted-foreground">
+                  Enter the reset code and choose a new password. The code
+                  expires in 30 minutes and can only be used once.
+                </p>
+                <FormField
+                  control={confirmForm.control}
+                  name="token"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Reset Code</FormLabel>
+                      <FormControl>
+                        <Input type="text" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={confirmForm.control}
+                  name="newPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetForgotFlow}
+                    disabled={isResetting}
+                  >
+                    Back
+                  </Button>
+                  <Button type="submit" disabled={isResetting}>
+                    Update Password
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          )}
         </DialogContent>
       </Dialog>
     </Layout>

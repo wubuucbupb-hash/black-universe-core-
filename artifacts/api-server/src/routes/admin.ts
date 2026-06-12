@@ -6,7 +6,6 @@ import {
   AdminListAssetsQueryParams,
   RejectAssetBody,
 } from "@workspace/api-zod";
-import bcrypt from "bcrypt";
 import { mintGravity, ensureUserMatrixAccount } from "../lib/matrixEngine";
 import { encrypt } from "../lib/encryption";
 
@@ -319,65 +318,10 @@ router.get("/admin/users", async (req, res): Promise<void> => {
   res.json(result);
 });
 
-// 🔥 SAFETY ROUTE: Frontend chahe kisi bhi route par bhatke, ye sabke liye password badal dega 🔥
-router.post("/admin/forgot-password", async (req, res): Promise<void> => {
-  try {
-    const { email, newPassword } = req.body;
-    if (!email || !newPassword) {
-      res.status(400).json({ error: "Email and new password are required" });
-      return;
-    }
-
-    const [userFound] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.email, email))
-      .limit(1);
-    if (!userFound) {
-      res
-        .status(404)
-        .json({ error: "This email is not registered in the database" });
-      return;
-    }
-
-    const newPasswordHash = await bcrypt.hash(newPassword, 10);
-    await db
-      .update(usersTable)
-      .set({ passwordHash: newPasswordHash })
-      .where(eq(usersTable.email, email));
-
-    res.json({ message: "Password updated successfully!" });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || "Internal Server Error" });
-  }
-});
-
-// Kuch systems standard authentication route ko fallback bana dete hain, unke liye backup:
-router.post("/forgot-password", async (req, res): Promise<void> => {
-  try {
-    const { email, newPassword } = req.body;
-    if (!email || !newPassword) {
-      res.status(400).json({ error: "Email and new password are required" });
-      return;
-    }
-    const [userFound] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.email, email))
-      .limit(1);
-    if (!userFound) {
-      res.status(404).json({ error: "This email is not registered" });
-      return;
-    }
-    const newPasswordHash = await bcrypt.hash(newPassword, 10);
-    await db
-      .update(usersTable)
-      .set({ passwordHash: newPasswordHash })
-      .where(eq(usersTable.email, email));
-    res.json({ message: "Password updated successfully!" });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || "Internal Server Error" });
-  }
-});
+// NOTE: The previously open `/admin/forgot-password` and `/forgot-password`
+// routes were removed. They allowed anyone to reset any account's password by
+// supplying only an email + new password (account takeover). Password resets now
+// go through the token-based flow in `users.ts`
+// (POST /users/forgot-password -> POST /users/reset-password).
 
 export default router;

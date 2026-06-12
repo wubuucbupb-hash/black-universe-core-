@@ -2,3 +2,4 @@
 - [DB schema drift on deploy](db-schema-drift.md) — task commits change the Drizzle schema but never run `push`; must run `pnpm --filter @workspace/db run push` after any schema change.
 - [matrix/accounts public contract](matrix-accounts-public-contract.md) — endpoint is public-by-design (Home preview) but must stay PII-stripped; never re-add phone/email or add an auth gate.
 - [drizzle-zod must import zod/v4](drizzle-zod-v4-import.md) — schema files using createInsertSchema must import z from "zod/v4"; a plain "zod" import breaks lib declaration emit and cascades fake "no exported member" errors into api-server.
+- [password reset & doc ACL](password-reset-and-doc-acl.md) — reset must stay token-based (never email-only); GET /storage/objects/* must stay session+owner gated before touching storage.

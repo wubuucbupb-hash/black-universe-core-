@@ -4,11 +4,15 @@ import {
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
 } from "@workspace/api-zod";
+import { db, assetsTable, usersTable } from "@workspace/db";
+import { and, eq, arrayContains } from "drizzle-orm";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
 } from "../lib/objectStorage";
-import type { ObjectPermission } from "../lib/objectAcl";
+
+// Roles allowed to read any asset document, regardless of ownership.
+const PRIVILEGED_ROLES = new Set(["admin", "custodian"]);
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -98,26 +102,52 @@ router.get(
  */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   try {
+    // Access control runs BEFORE we touch storage so we never confirm whether a
+    // file exists to a caller who isn't allowed to read it.
+    const userId = req.session.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
     const objectPath = `/objects/${wildcardPath}`;
+
+    const [user] = await db
+      .select({ role: usersTable.role })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+
+    if (!user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const isPrivileged = !!user.role && PRIVILEGED_ROLES.has(user.role);
+
+    if (!isPrivileged) {
+      // A citizen may only read documents attached to one of their own assets.
+      const [owned] = await db
+        .select({ id: assetsTable.id })
+        .from(assetsTable)
+        .where(
+          and(
+            eq(assetsTable.userId, userId),
+            arrayContains(assetsTable.documentUrls, [objectPath]),
+          ),
+        )
+        .limit(1);
+
+      if (!owned) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
+
     const objectFile =
       await objectStorageService.getObjectEntityFile(objectPath);
-
-    // --- Protected route example (uncomment when using replit-auth) ---
-    // if (!req.isAuthenticated()) {
-    //   res.status(401).json({ error: "Unauthorized" });
-    //   return;
-    // }
-    // const canAccess = await objectStorageService.canAccessObjectEntity({
-    //   userId: req.user.id,
-    //   objectFile,
-    //   requestedPermission: ObjectPermission.READ,
-    // });
-    // if (!canAccess) {
-    //   res.status(403).json({ error: "Forbidden" });
-    //   return;
-    // }
 
     const response = await objectStorageService.downloadObject(objectFile);
 
