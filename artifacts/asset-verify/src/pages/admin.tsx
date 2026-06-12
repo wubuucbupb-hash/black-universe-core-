@@ -14,14 +14,6 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,6 +36,7 @@ import {
   DollarSign,
   Clock,
   ShieldCheck,
+  FileText,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -324,202 +317,236 @@ export default function Admin() {
 
           <TabsContent
             value="assets"
-            className="bg-white border rounded-lg shadow-sm"
+            className="rounded-xl overflow-hidden border border-zinc-800"
           >
-            {isAssetsLoading ? (
-              <div className="p-8 space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : (
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-medium text-primary">
-                      Client
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Asset / Description
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Declared Value
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Status
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Date
-                    </TableHead>
-                    <TableHead className="text-right font-medium text-primary">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {assets?.map((asset) => (
-                    <TableRow key={asset.id}>
-                      <TableCell>
-                        <div className="font-medium">{asset.userName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {asset.userEmail}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">
-                          {asset.assetType.toUpperCase()}
-                        </div>
-                        <div
-                          className="text-sm max-w-[250px] truncate"
-                          title={asset.description}
-                        >
-                          {asset.description}
-                        </div>
-                        {asset.documentNote && (
-                          <div className="text-xs text-muted-foreground mt-1 truncate max-w-[250px]">
-                            Ref: {asset.documentNote}
+            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+              <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">
+                📜 ASSET REGISTRY — {assets?.length ?? 0} DECLARATIONS
+              </span>
+            </div>
+            <div className="bg-[#0a0a0a] overflow-x-auto">
+              {isAssetsLoading ? (
+                <div className="p-8 space-y-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : !assets || assets.length === 0 ? (
+                <div className="p-8 text-center text-zinc-600 font-mono text-sm">
+                  No asset declarations yet.
+                </div>
+              ) : (
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500">
+                      <th className="text-left px-4 py-2">CLIENT</th>
+                      <th className="text-left px-4 py-2">ASSET / DESCRIPTION</th>
+                      <th className="text-left px-4 py-2">DOCUMENTS</th>
+                      <th className="text-right px-4 py-2">DECLARED VALUE</th>
+                      <th className="text-left px-4 py-2">STATUS</th>
+                      <th className="text-left px-4 py-2">DATE</th>
+                      <th className="text-right px-4 py-2">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assets.map((asset) => (
+                      <tr key={asset.id} className="border-b border-zinc-900">
+                        <td className="px-4 py-2 align-top">
+                          <div className="text-white font-bold">
+                            {asset.userName}
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-serif font-medium">
-                        {formatCurrency(asset.claimedValue)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(asset.status)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(asset.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {asset.status === "pending" && (
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={() => handleApprove(asset.id)}
-                              disabled={approveAsset.isPending}
-                              data-testid={`button-approve-${asset.id}`}
-                            >
-                              <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
-                            </Button>
-
-                            <Dialog
-                              open={rejectId === asset.id}
-                              onOpenChange={(open) =>
-                                !open && setRejectId(null)
-                              }
-                            >
-                              <DialogTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                  onClick={() => setRejectId(asset.id)}
-                                  data-testid={`button-reject-${asset.id}`}
+                          <div className="text-zinc-500">{asset.userEmail}</div>
+                        </td>
+                        <td className="px-4 py-2 align-top">
+                          <div className="text-cyan-400 font-bold">
+                            {asset.assetType.toUpperCase()}
+                          </div>
+                          <div
+                            className="text-zinc-400 max-w-[240px] truncate"
+                            title={asset.description}
+                          >
+                            {asset.description}
+                          </div>
+                          {asset.documentNote && (
+                            <div className="text-zinc-600 mt-0.5 truncate max-w-[240px]">
+                              Ref: {asset.documentNote}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 align-top">
+                          {asset.documentUrls &&
+                          asset.documentUrls.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              {asset.documentUrls.map((path, i) => (
+                                <a
+                                  key={path}
+                                  href={`${BASE}/api/storage${path}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 hover:underline"
+                                  data-testid={`link-doc-${asset.id}-${i}`}
                                 >
-                                  <XCircle className="h-4 w-4 mr-1" /> Reject
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Reject Verification</DialogTitle>
-                                </DialogHeader>
-                                <div className="py-4">
-                                  <Textarea
-                                    placeholder="State the reason for rejection (required, min 5 chars)..."
-                                    value={rejectReason}
-                                    onChange={(e) =>
-                                      setRejectReason(e.target.value)
-                                    }
-                                    data-testid="input-reject-reason"
-                                  />
-                                </div>
-                                <DialogFooter>
+                                  <FileText className="h-3 w-3" /> Doc {i + 1}
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-zinc-700">— none —</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right text-green-400 font-bold align-top">
+                          {formatCurrency(asset.claimedValue)}
+                        </td>
+                        <td className="px-4 py-2 align-top">
+                          {getStatusBadge(asset.status)}
+                        </td>
+                        <td className="px-4 py-2 text-zinc-600 align-top">
+                          {formatDate(asset.createdAt)}
+                        </td>
+                        <td className="px-4 py-2 text-right align-top">
+                          {asset.status === "pending" && (
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-green-500/40 text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                                onClick={() => handleApprove(asset.id)}
+                                disabled={approveAsset.isPending}
+                                data-testid={`button-approve-${asset.id}`}
+                              >
+                                <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
+                              </Button>
+
+                              <Dialog
+                                open={rejectId === asset.id}
+                                onOpenChange={(open) =>
+                                  !open && setRejectId(null)
+                                }
+                              >
+                                <DialogTrigger asChild>
                                   <Button
+                                    size="sm"
                                     variant="outline"
-                                    onClick={() => setRejectId(null)}
+                                    className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                    onClick={() => setRejectId(asset.id)}
+                                    data-testid={`button-reject-${asset.id}`}
                                   >
-                                    Cancel
+                                    <XCircle className="h-4 w-4 mr-1" /> Reject
                                   </Button>
-                                  <Button
-                                    variant="destructive"
-                                    onClick={handleReject}
-                                    disabled={
-                                      rejectReason.length < 5 ||
-                                      rejectAsset.isPending
-                                    }
-                                    data-testid="button-confirm-reject"
-                                  >
-                                    Confirm Rejection
-                                  </Button>
-                                </DialogFooter>
-                              </DialogContent>
-                            </Dialog>
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>
+                                      Reject Verification
+                                    </DialogTitle>
+                                  </DialogHeader>
+                                  <div className="py-4">
+                                    <Textarea
+                                      placeholder="State the reason for rejection (required, min 5 chars)..."
+                                      value={rejectReason}
+                                      onChange={(e) =>
+                                        setRejectReason(e.target.value)
+                                      }
+                                      data-testid="input-reject-reason"
+                                    />
+                                  </div>
+                                  <DialogFooter>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setRejectId(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      onClick={handleReject}
+                                      disabled={
+                                        rejectReason.length < 5 ||
+                                        rejectAsset.isPending
+                                      }
+                                      data-testid="button-confirm-reject"
+                                    >
+                                      Confirm Rejection
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent
             value="users"
-            className="bg-white border rounded-lg shadow-sm"
+            className="rounded-xl overflow-hidden border border-zinc-800"
           >
-            {isUsersLoading ? (
-              <div className="p-8 space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : (
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-medium text-primary">
-                      Name
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Email
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Role
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Total Assets
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Total Claimed Value
-                    </TableHead>
-                    <TableHead className="font-medium text-primary">
-                      Joined
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users?.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.name}</TableCell>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={u.role === "admin" ? "default" : "outline"}
-                        >
-                          {u.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{u.assetCount}</TableCell>
-                      <TableCell className="font-serif">
-                        {formatCurrency(u.totalClaimedValue)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(u.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+              <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">
+                👤 PORTAL USERS — {users?.length ?? 0} ACCOUNTS
+              </span>
+            </div>
+            <div className="bg-[#0a0a0a] overflow-x-auto">
+              {isUsersLoading ? (
+                <div className="p-8 space-y-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : !users || users.length === 0 ? (
+                <div className="p-8 text-center text-zinc-600 font-mono text-sm">
+                  No registered users yet.
+                </div>
+              ) : (
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500">
+                      <th className="text-left px-4 py-2">NAME</th>
+                      <th className="text-left px-4 py-2">EMAIL</th>
+                      <th className="text-left px-4 py-2">ROLE</th>
+                      <th className="text-right px-4 py-2">TOTAL ASSETS</th>
+                      <th className="text-right px-4 py-2">
+                        TOTAL CLAIMED VALUE
+                      </th>
+                      <th className="text-left px-4 py-2">JOINED</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-b border-zinc-900">
+                        <td className="px-4 py-2 text-white font-bold">
+                          {u.name}
+                        </td>
+                        <td className="px-4 py-2 text-zinc-400">{u.email}</td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              u.role === "admin"
+                                ? "bg-cyan-500/20 text-cyan-400"
+                                : "bg-zinc-700 text-zinc-300"
+                            }`}
+                          >
+                            {u.role.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-right text-zinc-300">
+                          {u.assetCount}
+                        </td>
+                        <td className="px-4 py-2 text-right text-green-400 font-bold">
+                          {formatCurrency(u.totalClaimedValue)}
+                        </td>
+                        <td className="px-4 py-2 text-zinc-600">
+                          {formatDate(u.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </TabsContent>
           {/* ── MATRIX ACCOUNTS TAB ── */}
           <TabsContent value="matrix" className="rounded-xl overflow-hidden border border-zinc-800">

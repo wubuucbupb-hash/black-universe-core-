@@ -45,6 +45,7 @@ router.get("/admin/assets", async (req, res): Promise<void> => {
       claimedValue: assetsTable.claimedValue,
       description: assetsTable.description,
       documentNote: assetsTable.documentNote,
+      documentUrls: assetsTable.documentUrls,
       status: assetsTable.status,
       feeAmount: assetsTable.feeAmount,
       rejectionReason: assetsTable.rejectionReason,
