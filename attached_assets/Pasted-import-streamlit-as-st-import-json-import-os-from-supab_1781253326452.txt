@@ -1,0 +1,274 @@
+import streamlit as st
+import json
+import os
+from supabase import create_client, Client
+
+# 1. CLOUD DATABASE CONNECTION SETUP (Fixed)
+SUPABASE_URL = "https://xycrfjrtoevermkxqnbe.supabase.co"
+SUPABASE_KEY = "sb_publishable_qPtCB9lxQlPV62o4f9gvNg_RGoNDn5z"
+
+# Connection client ko humne Global bana diya hai taaki error na aaye
+supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def load_system_data():
+    """Cloud se real-time data fetch karne ka engine"""
+    # Ab yahan supabase_client ko koi dikkat nahi hogi
+    try:
+        # Cloud se ledger data uthana
+        response = supabase_client.table("bu_ledger").select("*").execute()
+        # Agar cloud par data hai toh use dictionary form mein badalna
+        if response.data:
+            matrix = {row["account_number"]: json.loads(row["data"]) for row in response.data}
+            
+            # Logs aur counters ko session state mein setup karna
+            log_response = supabase_client.table("bu_system_config").select("*").eq("key", "system_logs").execute()
+            logs = json.loads(log_response.data[0]["value"]) if log_response.data else ["⚙️ [SYSTEM] Cloud Storage Active. Data Locked."]
+            
+            counter_response = supabase_client.table("bu_system_config").select("*").eq("key", "cluster_counters").execute()
+            counters = json.loads(counter_response.data[0]["value"]) if counter_response.data else {"2": 1, "3": 1, "4": 1, "5": 1}
+            
+            return {"matrix_db": matrix, "cluster_counters": counters, "system_logs": logs}
+    except Exception as e:
+        st.error(f"Cloud Connection Error: {e}")
+            
+    # Fallback agar cloud config abhi set nahi hai
+    return {
+        "matrix_db": {
+            "000000000000": {"name": "⚠️ Black Universe — System Main Account", "gravity": 0.0, "type": "System Core"},
+            "111111111111": {"name": "👑 Founder Personal Account (Kuldeep Bhai)", "gravity": 0.0, "type": "Founder Core"},
+            "222222222222": {"name": "🏛️ Black Universe — Reserve Account", "gravity": 0.0, "type": "Reserve Pool"},
+            "333333333333": {"name": "⚖️ Black Universe — Stability Account", "gravity": 0.0, "type": "Stability Pool"},
+            "444444444444": {"name": "🛡️ Black Universe — Security Account", "gravity": 0.0, "type": "Security Pool"},
+            "555555555555": {"name": "📈 Black Universe — Growth Account", "gravity": 0.0, "type": "Growth Pool"}
+        },
+        "cluster_counters": {"2": 1, "3": 1, "4": 1, "5": 1},
+        "system_logs": ["⚙️ [SYSTEM] Local Sandbox Active. Cloud Pending."]
+    }
+def save_system_data(account_number=None, account_data=None):
+    """Har ek transaction ko instantly internet par lock karne ka engine"""
+    if supabase_client:
+        try:
+            # 1. Single Account Update/Insert
+            if account_number and account_data:
+                supabase_client.table("bu_ledger").upsert({
+                    "account_number": account_number,
+                    "data": json.dumps(account_data)
+                }).execute()
+            else:
+                # Full Sync if needed
+                for acc_num, data in st.session_state.matrix_db.items():
+                    supabase_client.table("bu_ledger").upsert({
+                        "account_number": acc_num,
+                        "data": json.dumps(data)
+                    }).execute()
+            
+            # 2. System Logs aur Counters Update
+            supabase_client.table("bu_system_config").upsert({"key": "system_logs", "value": json.dumps(st.session_state.system_logs)}).execute()
+            supabase_client.table("bu_system_config").upsert({"key": "cluster_counters", "value": json.dumps(st.session_state.cluster_counters)}).execute()
+        except Exception as e:
+            st.error(f"Cloud Save Failed: {e}")
+
+# Storage Engine Initialization
+if 'initialized' not in st.session_state:
+    init_data = load_system_data()
+    st.session_state.matrix_db = init_data["matrix_db"]
+    st.session_state.cluster_counters = init_data["cluster_counters"]
+    st.session_state.system_logs = init_data["system_logs"]
+    st.session_state.initialized = True
+
+# 2. UI LAYOUT SETUP
+st.set_page_config(page_title="BlackUniverse Core Matrix Engine", layout="wide")
+
+st.markdown("""
+    <style>
+    .main-title { font-size:36px !important; font-weight: 800; text-align: center; margin-bottom: 5px; }
+    .subtitle { font-size:16px; color: #555555; text-align: center; margin-bottom: 30px; }
+    .card-box { padding: 20px; background-color: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0px 4px 6px rgba(0,0,0,0.02); margin-bottom: 20px; }
+    .engine-box { padding: 25px; background-color: #0F172A; color: #38BDF8; border-radius: 12px; font-family: 'Courier New', monospace; min-height: 600px; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="main-title">🌌 BlackUniverse.world Matrix Engine</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Sovereign Asset Backing & 1% Continuous Founder Tax (Cloud Storage Active)</div>', unsafe_allow_html=True)
+
+col_left, col_right = st.columns([1.1, 0.9], gap="large")
+
+with col_left:
+    # 1. USER GENERATION PORTAL
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+    st.subheader("👤 Step 1: Legal Citizen Registration Portal")
+    
+    u_name = st.text_input("Enter Full Name / Enterprise Name:", placeholder="e.g., Alok Verma")
+    
+    col_id1, col_id2 = st.columns(2)
+    with col_id1:
+        national_id = st.text_input("National ID Card Number (Mandatory):", placeholder="Enter Passport / Gov ID No.", type="password")
+    with col_id2:
+        phone_num = st.text_input("Mobile Number with Country Code (Mandatory):", placeholder="e.g., +91 9876543210")
+        
+    email_id = st.text_input("Email Address (Optional):", placeholder="e.g., info@domain.com")
+    
+    cluster_options = {
+        "2": "Digit 2 Layer — Citizens",
+        "3": "Digit 3 Layer — State",
+        "4": "Digit 4 Layer — Nation",
+        "5": "Digit 5 Layer — Strategic Partners"
+    }
+    selected_prefix = st.selectbox("Choose Network Cluster:", options=list(cluster_options.keys()), format_func=lambda x: cluster_options[x])
+    
+    check_follow = st.checkbox("Rule 1: Official Page Followed")
+    check_msg = st.checkbox("Rule 2: Verification Message Sent")
+    
+    if st.button("🚀 VALIDATE AND INITIALIZE SOVEREIGN ID", use_container_width=True):
+        if not u_name.strip() or not national_id.strip() or not phone_num.strip():
+            st.error("Kripya saari mandatory information filled karein!")
+        elif not (check_follow and check_msg):
+            st.error("Sovereign Gate Refused: Social entry rules (Follow + Message) clear nahi hain!")
+        else:
+            current_suffix = st.session_state.cluster_counters[selected_prefix]
+            generated_acc = selected_prefix + str(current_suffix).zfill(11)
+            
+            user_data = {
+                "name": u_name.strip(), 
+                "gravity": 0.0, 
+                "type": f"Cluster-{selected_prefix} User",
+                "national_id": "[Aadhaar/ID Encrypted]",  # Pure data privacy compliance
+                "phone": phone_num.strip(),
+                "email": email_id.strip() if email_id.strip() else "Not Provided"
+            }
+            
+            st.session_state.matrix_db[generated_acc] = user_data
+            st.session_state.system_logs.append(f"✅ [CITIZEN] Account Created: {generated_acc}")
+            st.session_state.cluster_counters[selected_prefix] += 1
+            
+            save_system_data(generated_acc, user_data)  # Cloud Sync Save
+            st.success(f"Identity Verified! System Wallet Generated: {generated_acc}")
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 2. ADVANCED ROUTING MODULE
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+    st.subheader("📥 Step 2: Absolute System Minting & Sovereign Routing")
+    
+    active_wallets = {k: f"{v['name']} (Acc No: {k})" for k, v in st.session_state.matrix_db.items() if "User" in v['type']}
+    
+    if not active_wallets:
+        st.info("Sovereign pipeline test karne ke liye pehle 'Step 1' se ek profile register kijiye.")
+    else:
+        target_wallet = st.selectbox("Select Target Identity Account Number:", options=list(active_wallets.keys()))
+        asset_title = st.text_input("Asset Document Registry Info:", placeholder="e.g., Plot No 42, 500 Sq Yards Certificate")
+        
+        # Sateek Dharatali Niyam Integration: Input Base INR
+        inr_asset_value = st.number_input("Enter Certified Asset Valuation in INR (₹):", min_value=0.0, step=10000.0)
+        asset_value = inr_asset_value / 10000.0 if inr_asset_value > 0 else 0.0
+        
+        if inr_asset_value > 0:
+            st.info(f"✨ Calculated System Liquidity Expansion: {asset_value:,.2f} Gravity Notes")
+        
+        if st.button("🔥 EXECUTE SYSTEM MINT & SPLIT PIPELINE", use_container_width=True):
+            if asset_value <= 0 or not asset_title.strip():
+                st.error("Kripya valid asset valuation enter karein!")
+            else:
+                st.session_state.matrix_db["000000000000"]["gravity"] += asset_value
+                st.session_state.system_logs.append(f"🌌 [MINT] Total {asset_value:,.2f} Gravity generated inside Account '000000000000'.")
+                
+                founder_cut = asset_value * 0.01
+                st.session_state.matrix_db["111111111111"]["gravity"] += founder_cut
+                st.session_state.matrix_db["000000000000"]["gravity"] -= founder_cut
+                st.session_state.system_logs.append(f"👑 [FOUNDER RULE] 1% ({founder_cut:,.2f} Gravity) credited to Account '111111111111'.")
+                
+                reserve_share = asset_value * 0.24   
+                stability_share = asset_value * 0.25 
+                security_share = asset_value * 0.25  
+                growth_share = asset_value * 0.25    
+                
+                st.session_state.matrix_db["222222222222"]["gravity"] += reserve_share
+                st.session_state.matrix_db["333333333333"]["gravity"] += stability_share
+                st.session_state.matrix_db["444444444444"]["gravity"] += security_share
+                st.session_state.matrix_db[target_wallet]["gravity"] += growth_share
+                st.session_state.matrix_db["000000000000"]["gravity"] -= (reserve_share + stability_share + security_share + growth_share)
+                
+                st.session_state.system_logs.append(f"🏛️ [ROUTING] Reserve: {reserve_share:,.2f} | Stability: {stability_share:,.2f} | Security: {security_share:,.2f} routed.")
+                st.session_state.system_logs.append(f"👥 [USER DISTRIBUTION] Growth portion ({growth_share:,.2f} Gravity) credited.")
+                
+                save_system_data()  # Bulk Sync to Cloud
+                st.success("Sovereign Pipeline execution complete! Cloud Ledgers updated.")
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 3. P2P TRANSFER MODULE
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+    st.subheader("💸 Step 3: Peer-to-Peer (P2P) Sovereign Transfer")
+    
+    if len(active_wallets) < 1:
+        st.info("P2P Transactions test karne ke liye kam se kam ek ya do users register kijiye.")
+    else:
+        all_accounts = {k: f"{v['name']} (Acc No: {k}) [Bal: {v['gravity']:,.2f}]" for k, v in st.session_state.matrix_db.items() if "System Main" not in v['name']}
+        
+        sender_wallet = st.selectbox("Select Sender Account:", options=list(all_accounts.keys()), key="p2p_sender")
+        receiver_wallet = st.selectbox("Select Receiver Account:", options=list(all_accounts.keys()), key="p2p_receiver")
+        tx_amount = st.number_input("Enter Gravity Amount to Transfer:", min_value=0.0, step=1000.0)
+        
+        if st.button("🛡️ EXECUTE SECURE TRANSFER", use_container_width=True):
+            if sender_wallet == receiver_wallet:
+                st.error("Sender aur Receiver account numbers same nahi ho sakte!")
+            elif tx_amount <= 0:
+                st.error("Kripya valid transfer amount enter karein!")
+            elif st.session_state.matrix_db[sender_wallet]["gravity"] < tx_amount:
+                st.error(f"Infeasible Ledger: Sender ke paas balance nahi hai!")
+            else:
+                p2p_tax = tx_amount * 0.01
+                net_transfer = tx_amount - p2p_tax
+                
+                st.session_state.matrix_db[sender_wallet]["gravity"] -= tx_amount
+                st.session_state.matrix_db[receiver_wallet]["gravity"] += net_transfer
+                st.session_state.matrix_db["111111111111"]["gravity"] += p2p_tax
+                
+                st.session_state.system_logs.append(f"💸 [P2P TX] {st.session_state.matrix_db[sender_wallet]['name']} transferred {tx_amount:,.2f} Gravity.")
+                st.session_state.system_logs.append(f"🔥 [TAX ACTIVATED] 1% Tax ({p2p_tax:,.2f} Gravity) routed to Founder Account.")
+                
+                save_system_data()  # Bulk Sync to Cloud
+                st.success("Transfer Successful!")
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col_right:
+    st.markdown('<div class="engine-box">', unsafe_allow_html=True)
+    st.subheader("⚙️ REAL-TIME MATRIX LEDGER")
+    st.markdown("---")
+    
+    st.markdown("#### 🔒 Genesis System Cores (Locked Pool Status)")
+    for acc_num, info in st.session_state.matrix_db.items():
+        if "Core" in info['type'] or "Pool" in info['type']:
+            if acc_num == "111111111111":
+                bg, border, txt_c = "rgba(16, 185, 129, 0.12)", "1px solid #10B981", "#10B981"
+            elif acc_num == "000000000000":
+                bg, border, txt_c = "rgba(239, 68, 68, 0.12)", "1px solid #EF4444", "#EF4444"
+            else:
+                bg, border, txt_c = "rgba(56, 189, 248, 0.04)", "1px dashed #38BDF8", "#38BDF8"
+                
+            st.markdown(f"""
+            <div style='background: {bg}; padding: 8px; border-radius: 6px; margin-bottom: 5px; border: {border};'>
+                <span style='font-size:11px; color:{txt_c}; font-weight:bold;'>{info['type'].upper()}</span><br>
+                <b style='color:#F8FAFC; font-size:13px;'>{info['name']}</b><br>
+                <span style='font-size:11px; color:#64748B; font-family:monospace;'>Account Number: {acc_num} | <b>Balance: {info['gravity']:,.2f} Gravity</b></span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    st.markdown("---")
+    st.markdown("#### 👥 Registered Verified Citizens")
+    for acc_num, info in st.session_state.matrix_db.items():
+        if "User" in info['type']:
+            st.markdown(f"""
+            <div style='background: rgba(56, 189, 248, 0.04); padding: 10px; border-radius: 6px; margin-bottom: 6px; border-left: 4px solid #38BDF8;'>
+                <b style='color:#FFFFFF; font-size:14px;'>{info['name']}</b><br>
+                <span style='font-size:11px; color:#94A3B8; font-family:monospace;'>Account Number: {acc_num}</span><br>
+                <span style='font-size:15px; color:#22C55E; font-weight:bold;'>Balance: {info['gravity']:,.2f} Gravity</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    st.markdown("---")
+    st.markdown("#### 📜 Engine Log Matrix")
+    log_data = "".join([f"<div style='margin-bottom: 4px; font-size: 11px;'>{l}</div>" for l in reversed(st.session_state.system_logs)])
+    st.markdown(f"<div style='background: #020617; padding: 10px; border-radius: 6px; max-height: 140px; overflow-y: auto; border: 1px solid #1E293B;'>{log_data}</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
