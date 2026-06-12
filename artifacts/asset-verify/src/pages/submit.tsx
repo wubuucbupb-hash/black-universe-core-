@@ -192,17 +192,17 @@ export default function SubmitAsset() {
                 name="documentNote"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Supporting Documentation Reference</FormLabel>
+                    <FormLabel>Document / Reference Number</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="List relevant deeds, titles, or certificates held."
+                        placeholder="Enter a registration / deed / certificate number, or any reference. A number alone is fine."
                         className="min-h-[80px]"
                         {...field}
                         data-testid="input-doc-note"
                       />
                     </FormControl>
                     <FormDescription>
-                      Physical documents may be requested during the verification process.
+                      Optional. Provide a reference number here if you don't have a file to upload — or do both.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

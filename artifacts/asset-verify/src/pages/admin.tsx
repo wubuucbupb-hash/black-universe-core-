@@ -37,6 +37,7 @@ import {
   Clock,
   ShieldCheck,
   FileText,
+  Hash,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -366,17 +367,13 @@ export default function Admin() {
                           >
                             {asset.description}
                           </div>
-                          {asset.documentNote && (
-                            <div className="text-zinc-600 mt-0.5 truncate max-w-[240px]">
-                              Ref: {asset.documentNote}
-                            </div>
-                          )}
                         </td>
                         <td className="px-4 py-2 align-top">
-                          {asset.documentUrls &&
-                          asset.documentUrls.length > 0 ? (
+                          {(asset.documentUrls &&
+                            asset.documentUrls.length > 0) ||
+                          asset.documentNote ? (
                             <div className="flex flex-col gap-1">
-                              {asset.documentUrls.map((path, i) => (
+                              {asset.documentUrls?.map((path, i) => (
                                 <a
                                   key={path}
                                   href={`${BASE}/api/storage${path}`}
@@ -388,6 +385,18 @@ export default function Admin() {
                                   <FileText className="h-3 w-3" /> Doc {i + 1}
                                 </a>
                               ))}
+                              {asset.documentNote && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-zinc-300"
+                                  title={asset.documentNote}
+                                  data-testid={`text-doc-ref-${asset.id}`}
+                                >
+                                  <Hash className="h-3 w-3 flex-shrink-0 text-zinc-500" />
+                                  <span className="truncate max-w-[200px]">
+                                    {asset.documentNote}
+                                  </span>
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <span className="text-zinc-700">— none —</span>
