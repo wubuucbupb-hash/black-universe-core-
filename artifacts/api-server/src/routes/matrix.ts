@@ -73,7 +73,7 @@ router.post("/matrix/citizens", async (req, res): Promise<void> => {
       return;
     }
 
-    const validPrefixes = ["2", "3", "4", "5"];
+    const validPrefixes = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
     if (!validPrefixes.includes(String(clusterPrefix))) {
       res.status(400).json({ error: "Invalid cluster prefix" });
       return;
@@ -97,10 +97,15 @@ router.post("/matrix/citizens", async (req, res): Promise<void> => {
     const accountNumber = prefix + suffix;
 
     const clusterNames: Record<string, string> = {
-      "2": "Cluster-2 User",
-      "3": "Cluster-3 User",
-      "4": "Cluster-4 User",
-      "5": "Cluster-5 User",
+      "1": "Universal",
+      "2": "Sovereign",
+      "3": "International",
+      "4": "Nation",
+      "5": "Institution",
+      "6": "State",
+      "7": "Citizen",
+      "8": "Community",
+      "9": "Union",
     };
 
     const [newAccount] = await db

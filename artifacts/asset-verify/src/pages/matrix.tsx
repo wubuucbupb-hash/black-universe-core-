@@ -18,10 +18,15 @@ async function apiFetch(path: string, opts?: RequestInit) {
 }
 
 const CLUSTER_OPTIONS = [
-  { value: "2", label: "Digit 2 Layer — Citizens" },
-  { value: "3", label: "Digit 3 Layer — State" },
-  { value: "4", label: "Digit 4 Layer — Nation" },
-  { value: "5", label: "Digit 5 Layer — Strategic Partners" },
+  { value: "1", name: "Universal", acc: "1000,0000,0000", note: "Core / Law" },
+  { value: "2", name: "Sovereign", acc: "2000,0000,0000", note: "Jurisdiction" },
+  { value: "3", name: "International", acc: "3000,0000,0000", note: "" },
+  { value: "4", name: "Nation", acc: "4000,0000,0000", note: "" },
+  { value: "5", name: "Institution", acc: "5000,0000,0000", note: "" },
+  { value: "6", name: "State", acc: "6000,0000,0000", note: "" },
+  { value: "7", name: "Citizen", acc: "7000,0000,0000", note: "" },
+  { value: "8", name: "Community", acc: "8000,0000,0000", note: "" },
+  { value: "9", name: "Union", acc: "9000,0000,0000", note: "" },
 ];
 
 const SYSTEM_CORES = [
@@ -80,14 +85,14 @@ export default function MatrixEngine() {
   const citizens = accounts.filter((a) => !SYSTEM_CORES.includes(a.accountNumber));
 
   // ── Registration Form ──────────────────────────────────────────────────────
-  const [regForm, setRegForm] = useState({ name: "", phone: "", email: "", clusterPrefix: "2" });
+  const [regForm, setRegForm] = useState({ name: "", phone: "", email: "", clusterPrefix: "7" });
   const [regChecks, setRegChecks] = useState({ follow: false, message: false });
 
   const registerMutation = useMutation({
     mutationFn: (body: object) => apiFetch("/api/matrix/citizens", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: (data) => {
       toast({ title: "✅ Identity Verified!", description: `Wallet Created: ${data.account.accountNumber}` });
-      setRegForm({ name: "", phone: "", email: "", clusterPrefix: "2" });
+      setRegForm({ name: "", phone: "", email: "", clusterPrefix: "7" });
       setRegChecks({ follow: false, message: false });
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
       qc.invalidateQueries({ queryKey: ["matrix-logs"] });
@@ -233,7 +238,9 @@ export default function MatrixEngine() {
                   className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
                 >
                   {CLUSTER_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value}>
+                      {o.value}. {o.name} — {o.acc}{o.note ? ` (${o.note})` : ""}
+                    </option>
                   ))}
                 </select>
               </div>

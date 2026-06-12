@@ -45,7 +45,13 @@ import {
   Clock,
   ShieldCheck,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const VALID_TABS = ["matrix", "custody", "txns", "assets", "users"];
+function tabFromHash(): string {
+  const h = window.location.hash.replace(/^#/, "");
+  return VALID_TABS.includes(h) ? h : "matrix";
+}
 
 export default function Admin() {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -55,6 +61,20 @@ export default function Admin() {
 
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [activeTab, setActiveTab] = useState<string>(tabFromHash);
+
+  useEffect(() => {
+    const onHash = () => setActiveTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const handleTabChange = (v: string) => {
+    setActiveTab(v);
+    if (window.location.hash.replace(/^#/, "") !== v) {
+      window.history.replaceState(null, "", `#${v}`);
+    }
+  };
 
   const { data: stats, isLoading: isStatsLoading } = useGetAdminStats({
     query: {
@@ -293,7 +313,7 @@ export default function Admin() {
           </Card>
         </div>
 
-        <Tabs defaultValue="matrix" className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="mb-4 flex-wrap h-auto gap-1">
             <TabsTrigger value="matrix">🌌 Matrix Accounts</TabsTrigger>
             <TabsTrigger value="custody">🏛️ Custody Ledger</TabsTrigger>

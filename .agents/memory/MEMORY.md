@@ -1,2 +1,3 @@
 - [Task-commit clobbers index.ts](task-commit-clobbers-index.md) — large task merges have replaced index.ts with a flat Express app, losing session/health/routes.
 - [DB schema drift on deploy](db-schema-drift.md) — task commits change the Drizzle schema but never run `push`; must run `pnpm --filter @workspace/db run push` after any schema change.
+- [drizzle-zod must import zod/v4](drizzle-zod-v4-import.md) — schema files using createInsertSchema must import z from "zod/v4"; a plain "zod" import breaks lib declaration emit and cascades fake "no exported member" errors into api-server.

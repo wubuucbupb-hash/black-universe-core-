@@ -15,7 +15,7 @@ const SYSTEM_ACCOUNTS = [
   { accountNumber: "999999999999", name: "Black Universe — Commodities/Money Markets Account", type: "Commodities Pool" },
 ] as const;
 
-const CLUSTER_PREFIXES = ["2", "3", "4", "5"] as const;
+const CLUSTER_PREFIXES = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 
 export async function ensureSystemAccounts(): Promise<void> {
   for (const acc of SYSTEM_ACCOUNTS) {
