@@ -17,6 +17,19 @@ export interface SuccessResponse {
   message: string;
 }
 
+/**
+ * Network cluster layer the citizen joins (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners). Determines the account-number prefix. Defaults to 2.
+ */
+export type UserRegistrationCluster = typeof UserRegistrationCluster[keyof typeof UserRegistrationCluster];
+
+
+export const UserRegistrationCluster = {
+  NUMBER_2: '2',
+  NUMBER_3: '3',
+  NUMBER_4: '4',
+  NUMBER_5: '5',
+} as const;
+
 export interface UserRegistration {
   /** @minLength 2 */
   name: string;
@@ -25,6 +38,8 @@ export interface UserRegistration {
   password: string;
   /** @nullable */
   phoneNumber?: string | null;
+  /** Network cluster layer the citizen joins (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners). Determines the account-number prefix. Defaults to 2. */
+  cluster?: UserRegistrationCluster;
 }
 
 export interface UserLogin {

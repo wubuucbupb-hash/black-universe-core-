@@ -4,6 +4,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useRegisterUser, type User } from "@workspace/api-client-react";
 import { useAuth } from "@/components/auth-provider";
 
+const CLUSTER_OPTIONS = [
+  { value: "2", label: "Digit 2 Layer — Citizens" },
+  { value: "3", label: "Digit 3 Layer — State" },
+  { value: "4", label: "Digit 4 Layer — Nation" },
+  { value: "5", label: "Digit 5 Layer — Strategic Partners" },
+] as const;
+
 export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -15,6 +22,7 @@ export default function Register() {
     phone: "",
     password: "",
     confirm: "",
+    cluster: "2" as (typeof CLUSTER_OPTIONS)[number]["value"],
   });
   const [created, setCreated] = useState<User | null>(null);
 
@@ -57,6 +65,7 @@ export default function Register() {
         email: form.email.trim(),
         password: form.password,
         phoneNumber: form.phone.trim() || null,
+        cluster: form.cluster,
       },
     });
   }
@@ -147,6 +156,29 @@ export default function Register() {
                   data-testid="input-phone"
                 />
               </div>
+            </div>
+
+            {/* Network Cluster */}
+            <div>
+              <label className="text-zinc-400 text-xs font-mono">Network Cluster *</label>
+              <select
+                value={form.cluster}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    cluster: e.target.value as (typeof CLUSTER_OPTIONS)[number]["value"],
+                  })
+                }
+                className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2.5 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                data-testid="select-cluster"
+              >
+                {CLUSTER_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-zinc-600 text-[11px] font-mono mt-1">
+                Determines your sovereign account-number prefix.
+              </p>
             </div>
 
             {/* Password + Confirm */}

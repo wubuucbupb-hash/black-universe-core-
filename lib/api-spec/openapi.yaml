@@ -439,6 +439,13 @@ components:
           minLength: 6
         phoneNumber:
           type: ["string", "null"]
+        cluster:
+          type: string
+          enum: ["2", "3", "4", "5"]
+          description: >-
+            Network cluster layer the citizen joins
+            (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners).
+            Determines the account-number prefix. Defaults to 2.
 
     UserLogin:
       type: object

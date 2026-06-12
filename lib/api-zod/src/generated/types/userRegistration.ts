@@ -5,6 +5,7 @@
  * Asset verification platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { UserRegistrationCluster } from './userRegistrationCluster';
 
 export interface UserRegistration {
   /** @minLength 2 */
@@ -14,4 +15,6 @@ export interface UserRegistration {
   password: string;
   /** @nullable */
   phoneNumber?: string | null;
+  /** Network cluster layer the citizen joins (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners). Determines the account-number prefix. Defaults to 2. */
+  cluster?: UserRegistrationCluster;
 }

@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import { timingSafeEqual } from "crypto";
 import { db, usersTable } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
-import { provisionCitizenAccount } from "../lib/matrixEngine";
+import { provisionCitizenAccount, VALID_CLUSTERS } from "../lib/matrixEngine";
 
 const router = Router();
 
@@ -37,10 +37,15 @@ function userResponse(user: typeof usersTable.$inferSelect) {
 // ── Register ──────────────────────────────────────────────────────────────────
 router.post("/users/register", async (req, res): Promise<void> => {
   try {
-    const { name, email, phoneNumber, password } = req.body;
+    const { name, email, phoneNumber, password, cluster } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ error: "Email and password are required" });
+      return;
+    }
+
+    if (cluster != null && !VALID_CLUSTERS.includes(String(cluster) as (typeof VALID_CLUSTERS)[number])) {
+      res.status(400).json({ error: "Invalid network cluster" });
       return;
     }
 
@@ -66,6 +71,7 @@ router.post("/users/register", async (req, res): Promise<void> => {
       name: name || email,
       phone: phoneNumber,
       email,
+      cluster: cluster != null ? String(cluster) : undefined,
     });
     const [linkedUser] = await db
       .update(usersTable)

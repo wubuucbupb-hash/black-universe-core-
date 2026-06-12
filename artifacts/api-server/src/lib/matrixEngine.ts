@@ -19,8 +19,16 @@ export const RESERVE_ACCOUNT = "222222222222";
 export const STABILITY_ACCOUNT = "333333333333";
 export const SECURITY_ACCOUNT = "444444444444";
 
-// Citizens registered through the portal live in the "7" (Citizen) cluster.
-export const CITIZEN_CLUSTER = "7";
+// Network cluster layers a citizen can join at registration. The chosen digit
+// becomes the account-number prefix; cluster 2 (Citizens) is the default.
+export const VALID_CLUSTERS = ["2", "3", "4", "5"] as const;
+export const DEFAULT_CLUSTER = "2";
+export const CLUSTER_LABELS: Record<string, string> = {
+  "2": "Cluster-2 User",
+  "3": "Cluster-3 User",
+  "4": "Cluster-4 User",
+  "5": "Cluster-5 User",
+};
 
 export async function logTx(
   txType: string,
@@ -160,31 +168,35 @@ export async function provisionCitizenAccount(
     name: string;
     phone?: string | null;
     email?: string | null;
+    cluster?: string;
   },
   exec: DbExecutor = db,
 ): Promise<string> {
   const { name, phone, email } = params;
+  const cluster = VALID_CLUSTERS.includes(params.cluster as (typeof VALID_CLUSTERS)[number])
+    ? (params.cluster as string)
+    : DEFAULT_CLUSTER;
 
   // Ensure the cluster counter exists, then atomically increment it.
   await exec
     .insert(clusterCountersTable)
-    .values({ clusterPrefix: CITIZEN_CLUSTER, nextCounter: 1 })
+    .values({ clusterPrefix: cluster, nextCounter: 1 })
     .onConflictDoNothing();
 
   const [counter] = await exec
     .update(clusterCountersTable)
     .set({ nextCounter: sql`${clusterCountersTable.nextCounter} + 1` })
-    .where(eq(clusterCountersTable.clusterPrefix, CITIZEN_CLUSTER))
+    .where(eq(clusterCountersTable.clusterPrefix, cluster))
     .returning();
 
   const suffix = String(counter.nextCounter - 1).padStart(11, "0");
-  const accountNumber = CITIZEN_CLUSTER + suffix;
+  const accountNumber = cluster + suffix;
 
   await exec.insert(matrixAccountsTable).values({
     accountNumber,
     name: name.trim(),
-    type: "Citizen",
-    cluster: CITIZEN_CLUSTER,
+    type: CLUSTER_LABELS[cluster] ?? "Citizen",
+    cluster,
     phone: phone?.trim() || null,
     email: email?.trim() || null,
     gravityBalance: "0",

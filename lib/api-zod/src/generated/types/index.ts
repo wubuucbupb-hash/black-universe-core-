@@ -26,4 +26,5 @@ export * from './uploadUrlResponse';
 export * from './user';
 export * from './userLogin';
 export * from './userRegistration';
+export * from './userRegistrationCluster';
 export * from './userWithStats';
