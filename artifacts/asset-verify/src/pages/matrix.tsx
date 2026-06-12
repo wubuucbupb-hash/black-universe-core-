@@ -24,7 +24,11 @@ const CLUSTER_OPTIONS = [
   { value: "5", label: "Digit 5 Layer — Strategic Partners" },
 ];
 
-const SYSTEM_CORES = ["000000000000", "111111111111", "222222222222", "333333333333", "444444444444", "555555555555"];
+const SYSTEM_CORES = [
+  "000000000000", "111111111111",
+  "222222222222", "333333333333", "444444444444", "555555555555",
+  "666666666666", "777777777777", "888888888888", "999999999999",
+];
 
 function fmt(n: number | string) {
   return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

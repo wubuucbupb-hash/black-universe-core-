@@ -9,6 +9,10 @@ const SYSTEM_ACCOUNTS = [
   { accountNumber: "333333333333", name: "Black Universe — Stability Account", type: "Stability Pool" },
   { accountNumber: "444444444444", name: "Black Universe — Security Account", type: "Security Pool" },
   { accountNumber: "555555555555", name: "Black Universe — Growth Account", type: "Growth Pool" },
+  { accountNumber: "666666666666", name: "Black Universe — Real Estate Account", type: "Real Estate Pool" },
+  { accountNumber: "777777777777", name: "Black Universe — Debt Account", type: "Debt Pool" },
+  { accountNumber: "888888888888", name: "Black Universe — Equity Account", type: "Equity Pool" },
+  { accountNumber: "999999999999", name: "Black Universe — Commodities/Money Markets Account", type: "Commodities Pool" },
 ] as const;
 
 const CLUSTER_PREFIXES = ["2", "3", "4", "5"] as const;
