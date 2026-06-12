@@ -5,10 +5,15 @@ import { useRegisterUser, type User } from "@workspace/api-client-react";
 import { useAuth } from "@/components/auth-provider";
 
 const CLUSTER_OPTIONS = [
-  { value: "2", label: "Digit 2 Layer — Citizens" },
-  { value: "3", label: "Digit 3 Layer — State" },
-  { value: "4", label: "Digit 4 Layer — Nation" },
-  { value: "5", label: "Digit 5 Layer — Strategic Partners" },
+  { value: "1", name: "Universal", acc: "1000,0000,0000", note: "Core / Law" },
+  { value: "2", name: "Sovereign", acc: "2000,0000,0000", note: "Jurisdiction" },
+  { value: "3", name: "International", acc: "3000,0000,0000", note: "" },
+  { value: "4", name: "Nation", acc: "4000,0000,0000", note: "" },
+  { value: "5", name: "Institution", acc: "5000,0000,0000", note: "" },
+  { value: "6", name: "State", acc: "6000,0000,0000", note: "" },
+  { value: "7", name: "Citizen", acc: "7000,0000,0000", note: "" },
+  { value: "8", name: "Community", acc: "8000,0000,0000", note: "" },
+  { value: "9", name: "Union", acc: "9000,0000,0000", note: "" },
 ] as const;
 
 export default function Register() {
@@ -22,7 +27,7 @@ export default function Register() {
     phone: "",
     password: "",
     confirm: "",
-    cluster: "2" as (typeof CLUSTER_OPTIONS)[number]["value"],
+    cluster: "7" as (typeof CLUSTER_OPTIONS)[number]["value"],
   });
   const [created, setCreated] = useState<User | null>(null);
 
@@ -173,7 +178,9 @@ export default function Register() {
                 data-testid="select-cluster"
               >
                 {CLUSTER_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                  <option key={o.value} value={o.value}>
+                    {o.value}. {o.name} — {o.acc}{o.note ? ` (${o.note})` : ""}
+                  </option>
                 ))}
               </select>
               <p className="text-zinc-600 text-[11px] font-mono mt-1">

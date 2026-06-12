@@ -30,7 +30,7 @@ export const RegisterUserBody = zod.object({
   "email": zod.string().email(),
   "password": zod.string().min(registerUserBodyPasswordMin),
   "phoneNumber": zod.string().nullish(),
-  "cluster": zod.enum(['2', '3', '4', '5']).optional().describe('Network cluster layer the citizen joins (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners). Determines the account-number prefix. Defaults to 2.')
+  "cluster": zod.enum(['1', '2', '3', '4', '5', '6', '7', '8', '9']).optional().describe('Network cluster layer the citizen joins (1=Universal, 2=Sovereign, 3=International, 4=Nation, 5=Institution, 6=State, 7=Citizen, 8=Community, 9=Union). Determines the account-number prefix. Defaults to 7.')
 })
 
 

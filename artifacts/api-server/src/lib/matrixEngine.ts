@@ -20,14 +20,19 @@ export const STABILITY_ACCOUNT = "333333333333";
 export const SECURITY_ACCOUNT = "444444444444";
 
 // Network cluster layers a citizen can join at registration. The chosen digit
-// becomes the account-number prefix; cluster 2 (Citizens) is the default.
-export const VALID_CLUSTERS = ["2", "3", "4", "5"] as const;
-export const DEFAULT_CLUSTER = "2";
+// becomes the account-number prefix; cluster 7 (Citizen) is the default.
+export const VALID_CLUSTERS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
+export const DEFAULT_CLUSTER = "7";
 export const CLUSTER_LABELS: Record<string, string> = {
-  "2": "Cluster-2 User",
-  "3": "Cluster-3 User",
-  "4": "Cluster-4 User",
-  "5": "Cluster-5 User",
+  "1": "Universal",
+  "2": "Sovereign",
+  "3": "International",
+  "4": "Nation",
+  "5": "Institution",
+  "6": "State",
+  "7": "Citizen",
+  "8": "Community",
+  "9": "Union",
 };
 
 export async function logTx(

@@ -441,11 +441,12 @@ components:
           type: ["string", "null"]
         cluster:
           type: string
-          enum: ["2", "3", "4", "5"]
+          enum: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
           description: >-
-            Network cluster layer the citizen joins
-            (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners).
-            Determines the account-number prefix. Defaults to 2.
+            Network cluster layer the citizen joins (1=Universal, 2=Sovereign,
+            3=International, 4=Nation, 5=Institution, 6=State, 7=Citizen,
+            8=Community, 9=Union). Determines the account-number prefix.
+            Defaults to 7.
 
     UserLogin:
       type: object

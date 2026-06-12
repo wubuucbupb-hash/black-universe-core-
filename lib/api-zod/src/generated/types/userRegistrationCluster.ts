@@ -7,14 +7,19 @@
  */
 
 /**
- * Network cluster layer the citizen joins (2=Citizens, 3=State, 4=Nation, 5=Strategic Partners). Determines the account-number prefix. Defaults to 2.
+ * Network cluster layer the citizen joins (1=Universal, 2=Sovereign, 3=International, 4=Nation, 5=Institution, 6=State, 7=Citizen, 8=Community, 9=Union). Determines the account-number prefix. Defaults to 7.
  */
 export type UserRegistrationCluster = typeof UserRegistrationCluster[keyof typeof UserRegistrationCluster];
 
 
 export const UserRegistrationCluster = {
+  NUMBER_1: '1',
   NUMBER_2: '2',
   NUMBER_3: '3',
   NUMBER_4: '4',
   NUMBER_5: '5',
+  NUMBER_6: '6',
+  NUMBER_7: '7',
+  NUMBER_8: '8',
+  NUMBER_9: '9',
 } as const;
