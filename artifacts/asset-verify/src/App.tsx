@@ -12,6 +12,7 @@ import Dashboard from "@/pages/dashboard";
 import SubmitAsset from "@/pages/submit";
 import Admin from "@/pages/admin";
 import MatrixEngine from "@/pages/matrix";
+import VaultPage from "@/pages/vault";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/register" component={Register} />
       <Route path="/matrix" component={MatrixEngine} />
+      <Route path="/vault" component={VaultPage} />
 
       <Route path="/dashboard">
         {user ? <Dashboard /> : <Login />}

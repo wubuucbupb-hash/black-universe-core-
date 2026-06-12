@@ -1,6 +1,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { Layout } from "@/components/layout";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetMyAssetSummary,
   getGetMyAssetSummaryQueryKey,
@@ -31,6 +32,18 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const { data: vaultSummary } = useQuery({
+    queryKey: ["custody-summary"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/custody/summary`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!user,
+    refetchInterval: 10000,
+  });
 
   const { data: summary, isLoading: isSummaryLoading } = useGetMyAssetSummary({
     query: {
@@ -194,6 +207,32 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+        </div>
+
+        {/* Vault Status Banner */}
+        <div
+          onClick={() => setLocation("/vault")}
+          className="cursor-pointer flex items-center justify-between p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 hover:bg-yellow-500/10 transition-all mb-6"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🏛️</span>
+            <div>
+              <div className="text-yellow-400 font-bold text-sm tracking-wide">CUSTODY VAULT STATUS</div>
+              <div className="text-zinc-400 text-xs font-mono mt-0.5">
+                {vaultSummary
+                  ? `${vaultSummary.locked} Locked · ${vaultSummary.released} Released · ${vaultSummary.total} Total Entries`
+                  : "Loading vault data..."}
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            {vaultSummary && vaultSummary.locked > 0 && (
+              <div className="text-yellow-400 font-bold text-sm font-mono">
+                🔒 {vaultSummary.locked} LOCKED
+              </div>
+            )}
+            <div className="text-zinc-500 text-xs font-mono mt-0.5">Click to open vault →</div>
+          </div>
         </div>
 
         <div className="space-y-4">
