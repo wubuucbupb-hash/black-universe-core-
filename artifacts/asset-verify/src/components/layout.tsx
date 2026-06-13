@@ -64,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <Link href="/admin">
                       <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-admin">
                         <ShieldAlert className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Admin</span>
+                        <span className="hidden sm:inline">Control Space</span>
                       </Button>
                     </Link>
                     <Link href="/admin#matrix">

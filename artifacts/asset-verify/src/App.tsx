@@ -19,11 +19,13 @@ const queryClient = new QueryClient();
 import { useAuth } from "@/components/auth-provider";
 
 function Router() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
 
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/">
+        {isLoading ? null : user?.role === "admin" ? <Admin /> : <Home />}
+      </Route>
       <Route path="/register" component={Register} />
       <Route path="/matrix" component={MatrixEngine} />
       <Route path="/vault" component={VaultPage} />
@@ -235,7 +237,7 @@ function Home() {
               { label: "📊 Dashboard", sub: "Portfolio & Assets", path: "/dashboard", style: "border-zinc-700 hover:border-zinc-500" },
               { label: "🔥 Matrix Engine", sub: "Mint · P2P Transfer", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
               { label: "🏛️ Custody Vault", sub: "Lock · Escrow · Release", path: "/vault", style: "border-yellow-500/40 hover:border-yellow-500" },
-              { label: "🛠️ Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" },
+              { label: "🛠️ Universe Control Space", sub: "Mint · Approve · Issue", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" },
             ].map((btn) => (
               <button
                 key={btn.path}
@@ -311,7 +313,7 @@ function Home() {
             onClick={() => setLocation("/admin")}
             className="w-full py-3 bg-transparent border-2 border-cyan-500 text-cyan-400 font-bold rounded-md hover:bg-cyan-950 transition-all text-base"
           >
-            🛠️ Admin Control Room
+            🛠️ Universe Control Space
           </button>
         </div>
 
