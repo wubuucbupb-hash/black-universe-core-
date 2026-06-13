@@ -39,7 +39,9 @@ function AccountBadge({ acc }: { acc: any }) {
       <div className="text-white text-sm font-semibold leading-tight">{acc.name}</div>
       <div className="text-zinc-500 text-[11px] font-mono mt-0.5">
         {acc.accountNumber} &nbsp;|&nbsp;{" "}
-        <span className="text-green-400 font-bold">{fmt(acc.gravityBalance)} Gravity</span>
+        <span className="text-green-400 font-bold">
+          {isSystem ? `₹${fmt(acc.gravityBalance)} backing` : `${fmt(acc.gravityBalance)} Gravity`}
+        </span>
       </div>
     </div>
   );
@@ -73,14 +75,14 @@ export default function MatrixEngine() {
   const citizens = accounts.filter((a) => !SYSTEM_CORES.includes(a.accountNumber));
 
   // ── Mint Form ──────────────────────────────────────────────────────────────
-  const [mintForm, setMintForm] = useState({ inrValue: "", assetTitle: "", targetWallet: "" });
+  const [mintForm, setMintForm] = useState({ inrValue: "", assetTitle: "" });
   const gravityPreview = Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
 
   const mintMutation = useMutation({
     mutationFn: (body: object) => apiFetch("/api/matrix/mint", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: (data) => {
       toast({ title: "🔥 Mint Complete!", description: `${fmt(data.gravityTotal)} Gravity injected into the matrix` });
-      setMintForm({ inrValue: "", assetTitle: "", targetWallet: "" });
+      setMintForm({ inrValue: "", assetTitle: "" });
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
       qc.invalidateQueries({ queryKey: ["matrix-logs"] });
     },
@@ -88,11 +90,11 @@ export default function MatrixEngine() {
   });
 
   function handleMint() {
-    if (!mintForm.inrValue || Number(mintForm.inrValue) <= 0 || !mintForm.assetTitle.trim() || !mintForm.targetWallet) {
-      toast({ title: "Missing Fields", description: "INR value, asset title and target wallet are required", variant: "destructive" });
+    if (!mintForm.inrValue || Number(mintForm.inrValue) <= 0 || !mintForm.assetTitle.trim()) {
+      toast({ title: "Missing Fields", description: "Asset valuation and document info are required", variant: "destructive" });
       return;
     }
-    mintMutation.mutate({ inrValue: mintForm.inrValue, assetTitle: mintForm.assetTitle, targetWallet: mintForm.targetWallet });
+    mintMutation.mutate({ inrValue: mintForm.inrValue, assetTitle: mintForm.assetTitle });
   }
 
   // ── Transfer Form ──────────────────────────────────────────────────────────
@@ -150,22 +152,6 @@ export default function MatrixEngine() {
             ) : (
               <div className="space-y-3 mt-4">
                 <div>
-                  <label className="text-zinc-400 text-xs font-mono">Target Wallet (Growth Recipient) *</label>
-                  <select
-                    value={mintForm.targetWallet}
-                    onChange={(e) => setMintForm({ ...mintForm, targetWallet: e.target.value })}
-                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                  >
-                    <option value="">— Select Wallet —</option>
-                    {allWallets.map((a) => (
-                      <option key={a.accountNumber} value={a.accountNumber}>
-                        {a.name} ({a.accountNumber})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
                   <label className="text-zinc-400 text-xs font-mono">Asset Document Registry Info *</label>
                   <input
                     type="text"
@@ -197,11 +183,12 @@ export default function MatrixEngine() {
                 {gravityPreview > 0 && (
                   <div className="bg-black/50 border border-zinc-800 rounded-md p-3 text-[11px] font-mono space-y-1">
                     <div className="text-zinc-400">Split Preview:</div>
-                    <div className="text-emerald-400">👑 Founder (1%): {fmt(gravityPreview * 0.01)}</div>
-                    <div className="text-cyan-400">🏛️ Reserve (24%): {fmt(gravityPreview * 0.24)}</div>
-                    <div className="text-cyan-400">⚖️ Stability (25%): {fmt(gravityPreview * 0.25)}</div>
-                    <div className="text-cyan-400">🛡️ Security (25%): {fmt(gravityPreview * 0.25)}</div>
-                    <div className="text-green-400">📈 Growth → Target (25%): {fmt(gravityPreview * 0.25)}</div>
+                    <div className="text-red-400">🏦 Asset Value → System Core 000000000000: ₹{fmt(Number(mintForm.inrValue))}</div>
+                    <div className="text-emerald-400">👑 Founder (1%) → 111111111111: {fmt(gravityPreview * 0.01)}</div>
+                    <div className="text-cyan-400">🏛️ Reserve (24%) → 222222222222: {fmt(gravityPreview * 0.24)}</div>
+                    <div className="text-cyan-400">⚖️ Stability (25%) → 333333333333: {fmt(gravityPreview * 0.25)}</div>
+                    <div className="text-cyan-400">🛡️ Security (25%) → 444444444444: {fmt(gravityPreview * 0.25)}</div>
+                    <div className="text-green-400">📈 Growth (25%) → 555555555555 (Growth Pool): {fmt(gravityPreview * 0.25)}</div>
                   </div>
                 )}
 

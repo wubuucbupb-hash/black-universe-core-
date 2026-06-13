@@ -108,13 +108,10 @@ export default function UniverseControlSpace() {
   const systemAccounts = accounts.filter((a) =>
     SYSTEM_CORES.includes(a.accountNumber),
   );
-  const allWallets = accounts.filter((a) => a.accountNumber !== "000000000000");
-
   // ── Mint Gravity ────────────────────────────────────────────────────────
   const [mintForm, setMintForm] = useState({
     inrValue: "",
     assetTitle: "",
-    targetWallet: "",
   });
   const gravityPreview =
     Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
@@ -130,7 +127,7 @@ export default function UniverseControlSpace() {
         title: "🔥 Mint Complete!",
         description: `${fmt(data.gravityTotal)} Gravity injected into the matrix`,
       });
-      setMintForm({ inrValue: "", assetTitle: "", targetWallet: "" });
+      setMintForm({ inrValue: "", assetTitle: "" });
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
       qc.invalidateQueries({ queryKey: ["matrix-logs"] });
     },
@@ -146,12 +143,11 @@ export default function UniverseControlSpace() {
     if (
       !mintForm.inrValue ||
       Number(mintForm.inrValue) <= 0 ||
-      !mintForm.assetTitle.trim() ||
-      !mintForm.targetWallet
+      !mintForm.assetTitle.trim()
     ) {
       toast({
         title: "Missing Fields",
-        description: "INR value, asset title and target wallet are required",
+        description: "Asset valuation and document info are required",
         variant: "destructive",
       });
       return;
@@ -159,7 +155,6 @@ export default function UniverseControlSpace() {
     mintMutation.mutate({
       inrValue: mintForm.inrValue,
       assetTitle: mintForm.assetTitle,
-      targetWallet: mintForm.targetWallet,
     });
   }
 
@@ -295,8 +290,15 @@ export default function UniverseControlSpace() {
                       {acc.accountNumber}
                     </div>
                     <div className="text-green-400 text-sm font-bold font-mono mt-1">
-                      {fmt(acc.gravityBalance)} G
+                      {isSystem
+                        ? `₹${fmt(acc.gravityBalance)}`
+                        : `${fmt(acc.gravityBalance)} G`}
                     </div>
+                    {isSystem && (
+                      <div className="text-red-400/70 text-[9px] font-mono tracking-widest">
+                        ASSET BACKING
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -334,30 +336,6 @@ export default function UniverseControlSpace() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div>
-                      <label className="text-zinc-400 text-xs font-mono">
-                        Target Wallet (Growth Recipient) *
-                      </label>
-                      <select
-                        value={mintForm.targetWallet}
-                        onChange={(e) =>
-                          setMintForm({
-                            ...mintForm,
-                            targetWallet: e.target.value,
-                          })
-                        }
-                        className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                        data-testid="select-target-wallet"
-                      >
-                        <option value="">— Select Wallet —</option>
-                        {allWallets.map((a) => (
-                          <option key={a.accountNumber} value={a.accountNumber}>
-                            {a.name} ({a.accountNumber})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
                     <div>
                       <label className="text-zinc-400 text-xs font-mono">
                         Asset Document Registry Info *
@@ -405,6 +383,12 @@ export default function UniverseControlSpace() {
                       <div className="text-zinc-400 mb-1">
                         Sovereign Split Policy (decided ratios → accounts):
                       </div>
+                      <div className="text-red-400">
+                        🏦 Asset Value → System Core 000000000000 (backing)
+                        {Number(mintForm.inrValue) > 0
+                          ? `: ₹${fmt(Number(mintForm.inrValue))}`
+                          : ""}
+                      </div>
                       <div className="text-emerald-400">
                         👑 Founder (1%) → 111111111111
                         {gravityPreview > 0
@@ -430,7 +414,7 @@ export default function UniverseControlSpace() {
                           : ""}
                       </div>
                       <div className="text-green-400">
-                        📈 Growth (25%) → Target Wallet
+                        📈 Growth (25%) → 555555555555 (Growth Pool)
                         {gravityPreview > 0
                           ? `: ${fmt(gravityPreview * 0.25)}`
                           : ""}

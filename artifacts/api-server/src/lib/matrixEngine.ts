@@ -18,6 +18,7 @@ export const FOUNDER_ACCOUNT = "111111111111";
 export const RESERVE_ACCOUNT = "222222222222";
 export const STABILITY_ACCOUNT = "333333333333";
 export const SECURITY_ACCOUNT = "444444444444";
+export const GROWTH_ACCOUNT = "555555555555";
 
 // Network cluster layers a citizen can join at registration. The chosen digit
 // becomes the account-number prefix; cluster 7 (Citizen) is the default.
@@ -79,9 +80,18 @@ export interface MintResult {
 }
 
 /**
- * Mints gravity for a verified asset and distributes it across the system pools.
- * The growth share (25%) is routed to `targetWallet` — i.e. the asset owner.
- * Returns the total minted plus the per-pool split breakdown.
+ * Mints gravity for a verified asset.
+ *
+ * 1. The asset's INR value is deposited into System Core (000000000000) as the
+ *    real-world backing for the gravity being minted. System Core therefore
+ *    accumulates the total value of every asset backing the money supply.
+ * 2. Gravity (value / 10000) is minted and split across the system pools:
+ *    Founder 1%, Reserve 24%, Stability 25%, Security 25%, Growth 25%.
+ *    The growth share lands in `targetWallet` — the Growth Pool for system
+ *    mints, or the asset owner's wallet for user asset deposits.
+ *
+ * Founder always receives exactly 1% as long as `targetWallet` is not the
+ * Founder account.
  */
 export async function mintGravity(
   params: {
@@ -101,51 +111,35 @@ export async function mintGravity(
   const securityShare = gravityTotal * 0.25;
   const growthShare = gravityTotal * 0.25;
 
-  // Step 1: Mint total into system main
-  await adjustBalance(SYSTEM_MAIN, gravityTotal.toFixed(6), exec);
+  // Step 1: Deposit the backing asset value into System Core (000000000000).
+  await adjustBalance(SYSTEM_MAIN, inrValue.toFixed(6), exec);
   await logTx(
-    "MINT",
-    `🌌 [MINT] ${gravityTotal.toFixed(2)} Gravity minted for: "${assetTitle}"`,
+    "DEPOSIT",
+    `🏦 [ASSET DEPOSIT] ₹${inrValue.toFixed(2)} — "${assetTitle}" → System Core ${SYSTEM_MAIN}`,
     undefined,
     SYSTEM_MAIN,
-    gravityTotal.toFixed(6),
+    inrValue.toFixed(6),
     exec,
   );
 
-  // Step 2: 1% Founder cut
+  // Step 2: Mint gravity and split it across the system pools.
   await adjustBalance(FOUNDER_ACCOUNT, founderCut.toFixed(6), exec);
-  await adjustBalance(SYSTEM_MAIN, (-founderCut).toFixed(6), exec);
-  await logTx(
-    "MINT",
-    `👑 [FOUNDER RULE] 1% (${founderCut.toFixed(2)} Gravity) → ${FOUNDER_ACCOUNT}`,
-    SYSTEM_MAIN,
-    FOUNDER_ACCOUNT,
-    founderCut.toFixed(6),
-    exec,
-  );
-
-  // Step 3: Pool distribution
   await adjustBalance(RESERVE_ACCOUNT, reserveShare.toFixed(6), exec);
   await adjustBalance(STABILITY_ACCOUNT, stabilityShare.toFixed(6), exec);
   await adjustBalance(SECURITY_ACCOUNT, securityShare.toFixed(6), exec);
   await adjustBalance(targetWallet, growthShare.toFixed(6), exec);
-  await adjustBalance(
-    SYSTEM_MAIN,
-    (-(reserveShare + stabilityShare + securityShare + growthShare)).toFixed(6),
-    exec,
-  );
 
   await logTx(
     "MINT",
-    `🏛️ [ROUTING] Reserve: ${reserveShare.toFixed(2)} | Stability: ${stabilityShare.toFixed(2)} | Security: ${securityShare.toFixed(2)}`,
-    SYSTEM_MAIN,
+    `🌌 [MINT] ${gravityTotal.toFixed(2)} Gravity minted for "${assetTitle}"`,
     undefined,
-    reserveShare.toFixed(6),
+    undefined,
+    gravityTotal.toFixed(6),
     exec,
   );
   await logTx(
     "MINT",
-    `👥 [GROWTH] ${growthShare.toFixed(2)} Gravity → Wallet ${targetWallet}`,
+    `👑 Founder 1%: ${founderCut.toFixed(2)} | 🏛️ Reserve 24%: ${reserveShare.toFixed(2)} | ⚖️ Stability 25%: ${stabilityShare.toFixed(2)} | 🛡️ Security 25%: ${securityShare.toFixed(2)} | 📈 Growth 25%: ${growthShare.toFixed(2)} → ${targetWallet}`,
     SYSTEM_MAIN,
     targetWallet,
     growthShare.toFixed(6),

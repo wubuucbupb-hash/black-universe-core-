@@ -181,8 +181,11 @@ function Home() {
                         <div className="text-white text-xs font-semibold truncate mt-0.5">{SYSTEM_LABELS[acc.accountNumber] ?? acc.name}</div>
                         <div className="text-zinc-500 text-[10px] font-mono">{acc.accountNumber}</div>
                         <div className={`text-sm font-bold font-mono mt-1 ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                          {fmtG(acc.gravityBalance)} G
+                          {isSystem ? `₹${fmtG(acc.gravityBalance)}` : `${fmtG(acc.gravityBalance)} G`}
                         </div>
+                        {isSystem && (
+                          <div className="text-red-400/70 text-[8px] font-mono tracking-widest mt-0.5">ASSET BACKING</div>
+                        )}
                       </div>
                     );
                   })}

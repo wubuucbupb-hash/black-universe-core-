@@ -4,6 +4,7 @@ import { db, matrixAccountsTable, matrixTransactionsTable, usersTable } from "@w
 import { eq, desc } from "drizzle-orm";
 import {
   FOUNDER_ACCOUNT,
+  GROWTH_ACCOUNT,
   adjustBalance,
   logTx,
   mintGravity,
@@ -64,17 +65,19 @@ router.post("/matrix/mint", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
   try {
-    const { inrValue, assetTitle, targetWallet } = req.body;
+    const { inrValue, assetTitle } = req.body;
 
-    if (!inrValue || Number(inrValue) <= 0 || !assetTitle?.trim() || !targetWallet) {
-      res.status(400).json({ error: "INR value, asset title and target wallet are required" });
+    if (!inrValue || Number(inrValue) <= 0 || !assetTitle?.trim()) {
+      res.status(400).json({ error: "INR value and asset title are required" });
       return;
     }
 
+    // System mint: the growth share routes to the Growth Pool so the Founder
+    // always receives exactly 1% (never doubled via a user-selected target).
     const { gravityTotal, splits } = await mintGravity({
       inrValue: Number(inrValue),
       assetTitle: String(assetTitle),
-      targetWallet: String(targetWallet),
+      targetWallet: GROWTH_ACCOUNT,
     });
 
     res.json({ success: true, gravityTotal, splits });
