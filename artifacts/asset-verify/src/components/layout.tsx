@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "./auth-provider";
 import { useLogoutUser } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, LogOut, LayoutDashboard, FilePlus, ShieldAlert, Database, Zap, Lock } from "lucide-react";
+import { ShieldCheck, LogOut, LayoutDashboard, FilePlus, ShieldAlert, Database, Zap, Lock, Sparkles } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, setUser } = useAuth();
@@ -61,10 +61,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
                 {user.role === "admin" && (
                   <>
+                    <Link href="/universe-control-space">
+                      <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-universe">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Universe</span>
+                      </Button>
+                    </Link>
                     <Link href="/admin">
                       <Button variant="ghost" size="sm" className="gap-1.5 text-cyan-300 hover:text-cyan-100 hover:bg-cyan-950/50" data-testid="link-admin">
                         <ShieldAlert className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Control Space</span>
+                        <span className="hidden sm:inline">Admin</span>
                       </Button>
                     </Link>
                     <Link href="/admin#matrix">

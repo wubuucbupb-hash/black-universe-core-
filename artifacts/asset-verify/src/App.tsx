@@ -11,6 +11,7 @@ import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
 import SubmitAsset from "@/pages/submit";
 import Admin from "@/pages/admin";
+import UniverseControlSpace from "@/pages/universe-control-space";
 import MatrixEngine from "@/pages/matrix";
 import VaultPage from "@/pages/vault";
 
@@ -19,13 +20,11 @@ const queryClient = new QueryClient();
 import { useAuth } from "@/components/auth-provider";
 
 function Router() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
 
   return (
     <Switch>
-      <Route path="/">
-        {isLoading ? null : user?.role === "admin" ? <Admin /> : <Home />}
-      </Route>
+      <Route path="/" component={Home} />
       <Route path="/register" component={Register} />
       <Route path="/matrix" component={MatrixEngine} />
       <Route path="/vault" component={VaultPage} />
@@ -41,6 +40,8 @@ function Router() {
       <Route path="/admin">
         <Admin />
       </Route>
+
+      <Route path="/universe-control-space" component={UniverseControlSpace} />
 
       <Route component={NotFound} />
     </Switch>
@@ -231,13 +232,29 @@ function Home() {
             </div>
           </div>
 
+          {/* Universe Control Space — Minting */}
+          <button
+            onClick={() => setLocation("/universe-control-space")}
+            className="w-full flex items-center justify-between p-4 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:to-emerald-500/20 transition-all"
+            data-testid="button-ucs-home"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🪙</span>
+              <div className="text-left">
+                <div className="text-cyan-300 font-bold text-sm font-mono tracking-widest">UNIVERSE CONTROL SPACE</div>
+                <div className="text-zinc-500 text-[10px] font-mono mt-0.5">Minting · Approve verified assets & issue Gravity</div>
+              </div>
+            </div>
+            <span className="text-cyan-400 text-xs font-mono">Open →</span>
+          </button>
+
           {/* Quick Actions */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: "📊 Dashboard", sub: "Portfolio & Assets", path: "/dashboard", style: "border-zinc-700 hover:border-zinc-500" },
               { label: "🔥 Matrix Engine", sub: "Mint · P2P Transfer", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
               { label: "🏛️ Custody Vault", sub: "Lock · Escrow · Release", path: "/vault", style: "border-yellow-500/40 hover:border-yellow-500" },
-              { label: "🛠️ Universe Control Space", sub: "Mint · Approve · Issue", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" },
+              { label: "🛠️ Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" },
             ].map((btn) => (
               <button
                 key={btn.path}
@@ -306,6 +323,17 @@ function Home() {
           <p className="text-[10px] text-zinc-600 font-mono text-center">Mint · P2P Transfer</p>
         </div>
 
+        {/* Universe Control Space */}
+        <div className="p-4 bg-zinc-900 border border-cyan-500/30 rounded-lg space-y-2">
+          <p className="text-[10px] text-cyan-600 font-mono tracking-widest text-center">UNIVERSE CONTROL SPACE</p>
+          <button
+            onClick={() => setLocation("/universe-control-space")}
+            className="w-full py-3 bg-cyan-500 text-black font-extrabold rounded-md hover:bg-cyan-400 transition-all text-base shadow-lg shadow-cyan-500/25"
+          >
+            🪙 Minting
+          </button>
+        </div>
+
         {/* Admin */}
         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
           <p className="text-xs text-zinc-500 font-mono tracking-widest text-center">SYSTEM ARCHITECT</p>
@@ -313,7 +341,7 @@ function Home() {
             onClick={() => setLocation("/admin")}
             className="w-full py-3 bg-transparent border-2 border-cyan-500 text-cyan-400 font-bold rounded-md hover:bg-cyan-950 transition-all text-base"
           >
-            🛠️ Universe Control Space
+            🛠️ Admin Control Room
           </button>
         </div>
 
