@@ -1,188 +1,243 @@
+import { useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
-import { Layout } from "@/components/layout";
-import { useLocation } from "wouter";
-import {
-  useGetAdminStats,
-  getGetAdminStatsQueryKey,
-  useAdminListAssets,
-  getAdminListAssetsQueryKey,
-  useApproveAsset,
-  useRejectAsset,
-  useDepositAsset,
-} from "@workspace/api-client-react";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { Layout } from "@/components/layout";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
-  CheckCircle2,
-  XCircle,
-  DollarSign,
-  Clock,
+  useSubmitAsset,
+  getListMyAssetsQueryKey,
+  getGetMyAssetSummaryQueryKey,
+} from "@workspace/api-client-react";
+import { ObjectUploader } from "@workspace/object-storage-web";
+import type { UploadResult } from "@uppy/core";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
   Sparkles,
+  ShieldCheck,
   FileText,
-  Hash,
-  LayoutList,
+  X,
+  CheckCircle2,
+  Lock,
 } from "lucide-react";
-import { useState } from "react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function apiFetch(path: string, opts?: RequestInit) {
+  const res = await fetch(`${BASE}${path}`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+const SYSTEM_CORES = [
+  "000000000000",
+  "111111111111",
+  "222222222222",
+  "333333333333",
+  "444444444444",
+  "555555555555",
+  "666666666666",
+  "777777777777",
+  "888888888888",
+  "999999999999",
+];
+
+function fmt(n: number | string) {
+  return Number(n).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+const submitSchema = z.object({
+  assetType: z.enum(
+    ["real_estate", "vehicle", "gold_jewelry", "stocks", "business", "other"],
+    {
+      required_error: "Please select an asset type",
+    },
+  ),
+  claimedValue: z.coerce.number().min(1, "Value must be greater than 0"),
+  description: z.string().min(5, "Please provide a detailed description"),
+  documentNote: z.string().optional(),
+});
+
+type UploadedDoc = { name: string; objectPath: string };
 
 export default function UniverseControlSpace() {
   const { user, isLoading: isAuthLoading } = useAuth();
-  const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  const [rejectId, setRejectId] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
+  const qc = useQueryClient();
+  const [, setLocation] = useLocation();
 
   const isAdmin = user?.role === "admin";
 
-  const { data: stats, isLoading: isStatsLoading } = useGetAdminStats({
-    query: {
-      queryKey: getGetAdminStatsQueryKey(),
-      enabled: isAdmin,
+  // ── System Accounts ─────────────────────────────────────────────────────
+  const { data: accountsData, isLoading: loadingAccounts } = useQuery({
+    queryKey: ["matrix-accounts"],
+    queryFn: () => apiFetch("/api/matrix/accounts"),
+    refetchInterval: 5000,
+  });
+  const accounts: any[] = accountsData?.accounts ?? [];
+  const systemAccounts = accounts.filter((a) =>
+    SYSTEM_CORES.includes(a.accountNumber),
+  );
+  const allWallets = accounts.filter((a) => a.accountNumber !== "000000000000");
+
+  // ── Mint Gravity ────────────────────────────────────────────────────────
+  const [mintForm, setMintForm] = useState({
+    inrValue: "",
+    assetTitle: "",
+    targetWallet: "",
+  });
+  const gravityPreview =
+    Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
+
+  const mintMutation = useMutation({
+    mutationFn: (body: object) =>
+      apiFetch("/api/matrix/mint", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (data) => {
+      toast({
+        title: "🔥 Mint Complete!",
+        description: `${fmt(data.gravityTotal)} Gravity injected into the matrix`,
+      });
+      setMintForm({ inrValue: "", assetTitle: "", targetWallet: "" });
+      qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
+      qc.invalidateQueries({ queryKey: ["matrix-logs"] });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Mint Failed",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+
+  function handleMint() {
+    if (
+      !mintForm.inrValue ||
+      Number(mintForm.inrValue) <= 0 ||
+      !mintForm.assetTitle.trim() ||
+      !mintForm.targetWallet
+    ) {
+      toast({
+        title: "Missing Fields",
+        description: "INR value, asset title and target wallet are required",
+        variant: "destructive",
+      });
+      return;
+    }
+    mintMutation.mutate({
+      inrValue: mintForm.inrValue,
+      assetTitle: mintForm.assetTitle,
+      targetWallet: mintForm.targetWallet,
+    });
+  }
+
+  // ── Submit Asset ────────────────────────────────────────────────────────
+  const submit = useSubmitAsset();
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const objectPathsRef = useRef<
+    Map<string, { name: string; objectPath: string }>
+  >(new Map());
+
+  const form = useForm<z.infer<typeof submitSchema>>({
+    resolver: zodResolver(submitSchema),
+    defaultValues: {
+      assetType: "real_estate",
+      claimedValue: 0,
+      description: "",
+      documentNote: "",
     },
   });
 
-  const { data: assets, isLoading: isAssetsLoading } = useAdminListAssets(
-    {},
-    {
-      query: {
-        queryKey: getAdminListAssetsQueryKey(),
-        enabled: isAdmin,
-      },
-    },
-  );
-
-  const approveAsset = useApproveAsset();
-  const rejectAsset = useRejectAsset();
-  const depositAsset = useDepositAsset();
-
-  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-  if (isAuthLoading) return null;
-
-  const handleApprove = (id: number) => {
-    approveAsset.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({
-            queryKey: getAdminListAssetsQueryKey(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: getGetAdminStatsQueryKey(),
-          });
-          toast({
-            title: "Asset Approved",
-            description: "The asset has been officially verified.",
-          });
-        },
-        onError: (err: unknown) => {
-          const msg = (err as { error?: string })?.error;
-          toast({
-            title: "Error",
-            description: msg || "Failed to approve asset.",
-            variant: "destructive",
-          });
-        },
-      },
-    );
-  };
-
-  const handleReject = () => {
-    if (!rejectId || rejectReason.length < 5) return;
-
-    rejectAsset.mutate(
-      { id: rejectId, data: { reason: rejectReason } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({
-            queryKey: getAdminListAssetsQueryKey(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: getGetAdminStatsQueryKey(),
-          });
-          setRejectId(null);
-          setRejectReason("");
-          toast({
-            title: "Asset Rejected",
-            description: "The asset has been rejected.",
-          });
-        },
-        onError: (err: unknown) => {
-          const msg = (err as { error?: string })?.error;
-          toast({
-            title: "Error",
-            description: msg || "Failed to reject asset.",
-            variant: "destructive",
-          });
-        },
-      },
-    );
-  };
-
-  const handleDeposit = (id: number) => {
-    depositAsset.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({
-            queryKey: getAdminListAssetsQueryKey(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: getGetAdminStatsQueryKey(),
-          });
-          toast({
-            title: "Asset Deposited & Minted",
-            description: "Gravity has been issued and locked into custody.",
-          });
-        },
-        onError: (err: unknown) => {
-          const msg = (err as { error?: string })?.error;
-          toast({
-            title: "Error",
-            description: msg || "Failed to deposit asset.",
-            variant: "destructive",
-          });
-        },
-      },
-    );
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "approved":
-        return <Badge className="bg-green-600">Verified</Badge>;
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      default:
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-accent/20 text-accent-foreground border-accent/30"
-          >
-            Pending
-          </Badge>
-        );
+  const handleUploadComplete = (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>,
+  ) => {
+    const newDocs: UploadedDoc[] = [];
+    for (const file of result.successful ?? []) {
+      const stored = objectPathsRef.current.get(file.id);
+      if (stored) newDocs.push(stored);
+    }
+    setUploadedDocs((prev) => [...prev, ...newDocs]);
+    if (newDocs.length > 0) {
+      toast({
+        title: "Document Uploaded",
+        description: `${newDocs.length} file(s) ready to attach to this asset.`,
+      });
     }
   };
 
+  const removeDoc = (objectPath: string) => {
+    setUploadedDocs((prev) => prev.filter((d) => d.objectPath !== objectPath));
+  };
+
+  const onSubmit = (values: z.infer<typeof submitSchema>) => {
+    submit.mutate(
+      {
+        data: {
+          ...values,
+          documentUrls: uploadedDocs.map((d) => d.objectPath),
+        },
+      },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListMyAssetsQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetMyAssetSummaryQueryKey() });
+          toast({
+            title: "Asset Declared",
+            description: "Your asset has been submitted for verification.",
+          });
+          form.reset();
+          setUploadedDocs([]);
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { error?: string })?.error;
+          toast({
+            title: "Submission Failed",
+            description: msg || "An error occurred while submitting the asset.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  if (isAuthLoading) return null;
+
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Header */}
         <div className="flex items-center gap-3 mb-2">
           <Sparkles className="h-8 w-8 text-primary" />
           <h1 className="text-3xl font-serif font-bold text-primary">
@@ -190,288 +245,439 @@ export default function UniverseControlSpace() {
           </h1>
         </div>
         <p className="text-sm text-muted-foreground mb-8 font-mono tracking-wide">
-          Minting · Approve verified assets and issue Gravity
+          The Universe Vault — mint Gravity, submit assets, and route the
+          sovereign split across system accounts.
         </p>
 
-        {!isAdmin ? (
-          <Card>
-            <CardContent className="py-12 text-center space-y-4">
-              <p className="text-muted-foreground">
-                Universe Control Space minting is reserved for the founder
-                console for now. Black Universe citizens will be connected here
-                soon.
-              </p>
-              <Button
-                onClick={() => setLocation("/dashboard")}
-                className="bg-cyan-600 hover:bg-cyan-500 text-white"
-                data-testid="button-ucs-signin"
-              >
-                Sign in as admin
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {/* Minting stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Pending Verifications
-                  </CardTitle>
-                  <Clock className="h-4 w-4 text-accent" />
-                </CardHeader>
-                <CardContent>
-                  {isStatsLoading ? (
-                    <Skeleton className="h-8 w-16" />
-                  ) : (
-                    <div className="text-2xl font-serif font-bold text-accent">
-                      {stats?.pendingAssets || 0}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Total Verified Value
-                  </CardTitle>
-                  <LayoutList className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  {isStatsLoading ? (
-                    <Skeleton className="h-8 w-32" />
-                  ) : (
-                    <div className="text-2xl font-serif font-bold text-green-600">
-                      {formatCurrency(stats?.totalVerifiedValue || 0)}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              <Card className="bg-gradient-to-br from-yellow-50 to-amber-100 border-amber-300 shadow-md">
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-amber-800">
-                    Founder Fee Earned (1%)
-                  </CardTitle>
-                  <DollarSign className="h-5 w-5 text-amber-600" />
-                </CardHeader>
-                <CardContent>
-                  {isStatsLoading ? (
-                    <Skeleton className="h-8 w-32" />
-                  ) : (
-                    <div className="text-2xl font-serif font-bold text-amber-900">
-                      {formatCurrency(stats?.totalFeesEarned || 0)}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+        {/* ── System Accounts ── */}
+        <section className="mb-10">
+          <h2 className="text-xs font-bold font-mono text-cyan-400 tracking-widest mb-3">
+            🔒 SYSTEM ACCOUNTS — GENESIS CORES
+          </h2>
+          {loadingAccounts ? (
+            <div className="text-zinc-500 text-sm font-mono">
+              Loading system accounts…
             </div>
-
-            {/* Asset Registry — minting */}
-            <div className="rounded-xl overflow-hidden border border-zinc-800">
-              <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
-                <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">
-                  📜 ASSET REGISTRY — {assets?.length ?? 0} DECLARATIONS
-                </span>
-              </div>
-              <div className="bg-[#0a0a0a] overflow-x-auto">
-                {isAssetsLoading ? (
-                  <div className="p-8 space-y-4">
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
+          ) : systemAccounts.length === 0 ? (
+            <div className="text-zinc-500 text-sm font-mono">
+              No system accounts found.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {systemAccounts.map((acc) => {
+                const isFounder = acc.accountNumber === "111111111111";
+                const isSystem = acc.accountNumber === "000000000000";
+                const border = isFounder
+                  ? "border-emerald-500/60"
+                  : isSystem
+                    ? "border-red-500/60"
+                    : "border-cyan-500/30";
+                const typeColor = isFounder
+                  ? "text-emerald-400"
+                  : isSystem
+                    ? "text-red-400"
+                    : "text-cyan-400";
+                return (
+                  <div
+                    key={acc.accountNumber}
+                    className={`border ${border} rounded-lg p-3 bg-zinc-950`}
+                    data-testid={`account-${acc.accountNumber}`}
+                  >
+                    <div
+                      className={`text-[10px] font-bold font-mono ${typeColor} uppercase tracking-widest`}
+                    >
+                      {acc.type}
+                    </div>
+                    <div className="text-white text-sm font-semibold leading-tight mt-0.5">
+                      {acc.name}
+                    </div>
+                    <div className="text-zinc-500 text-[11px] font-mono mt-1">
+                      {acc.accountNumber}
+                    </div>
+                    <div className="text-green-400 text-sm font-bold font-mono mt-1">
+                      {fmt(acc.gravityBalance)} G
+                    </div>
                   </div>
-                ) : !assets || assets.length === 0 ? (
-                  <div className="p-8 text-center text-zinc-600 font-mono text-sm">
-                    No asset declarations yet.
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ── Universe Vault ── */}
+        <section>
+          <h2 className="text-xs font-bold font-mono text-cyan-400 tracking-widest mb-3">
+            🌌 UNIVERSE VAULT
+          </h2>
+
+          <Tabs defaultValue="mint" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="mint" data-testid="tab-mint">
+                🔥 Mint Gravity
+              </TabsTrigger>
+              <TabsTrigger value="submit" data-testid="tab-submit">
+                📜 Submit Asset
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Mint Gravity */}
+            <TabsContent value="mint">
+              <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
+                {!isAdmin ? (
+                  <div className="flex items-start gap-3 p-4 border border-yellow-500/30 rounded-md bg-yellow-500/5 text-yellow-400 text-sm font-mono">
+                    <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      FOUNDER ROOT ACCESS REQUIRED — Gravity minting is locked to
+                      the founder console (Account 111111111111). Black Universe
+                      citizens will be connected here soon.
+                    </span>
                   </div>
                 ) : (
-                  <table className="w-full text-xs font-mono">
-                    <thead>
-                      <tr className="border-b border-zinc-800 text-zinc-500">
-                        <th className="text-left px-4 py-2">CLIENT</th>
-                        <th className="text-left px-4 py-2">
-                          ASSET / DESCRIPTION
-                        </th>
-                        <th className="text-left px-4 py-2">DOCUMENTS</th>
-                        <th className="text-right px-4 py-2">DECLARED VALUE</th>
-                        <th className="text-left px-4 py-2">STATUS</th>
-                        <th className="text-left px-4 py-2">DATE</th>
-                        <th className="text-right px-4 py-2">ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assets.map((asset) => (
-                        <tr key={asset.id} className="border-b border-zinc-900">
-                          <td className="px-4 py-2 align-top">
-                            <div className="text-white font-bold">
-                              {asset.userName}
-                            </div>
-                            <div className="text-zinc-500">
-                              {asset.userEmail}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 align-top">
-                            <div className="text-cyan-400 font-bold">
-                              {asset.assetType.toUpperCase()}
-                            </div>
-                            <div
-                              className="text-zinc-400 max-w-[240px] truncate"
-                              title={asset.description}
-                            >
-                              {asset.description}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 align-top">
-                            {(asset.documentUrls &&
-                              asset.documentUrls.length > 0) ||
-                            asset.documentNote ? (
-                              <div className="flex flex-col gap-1">
-                                {asset.documentUrls?.map((path, i) => (
-                                  <a
-                                    key={path}
-                                    href={`${BASE}/api/storage${path}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 hover:underline"
-                                    data-testid={`link-doc-${asset.id}-${i}`}
-                                  >
-                                    <FileText className="h-3 w-3" /> Doc {i + 1}
-                                  </a>
-                                ))}
-                                {asset.documentNote && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-zinc-300"
-                                    title={asset.documentNote}
-                                    data-testid={`text-doc-ref-${asset.id}`}
-                                  >
-                                    <Hash className="h-3 w-3 flex-shrink-0 text-zinc-500" />
-                                    <span className="truncate max-w-[200px]">
-                                      {asset.documentNote}
-                                    </span>
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-zinc-700">— none —</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2 text-right text-green-400 font-bold align-top">
-                            {formatCurrency(asset.claimedValue)}
-                          </td>
-                          <td className="px-4 py-2 align-top">
-                            <div className="flex flex-col gap-1">
-                              {getStatusBadge(asset.status)}
-                              {asset.mintedAt && (
-                                <Badge className="bg-cyan-600 hover:bg-cyan-700 w-fit">
-                                  Minted
-                                  {asset.gravityIssued != null
-                                    ? ` · ${asset.gravityIssued} G`
-                                    : ""}
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 text-zinc-600 align-top">
-                            {formatDate(asset.createdAt)}
-                          </td>
-                          <td className="px-4 py-2 text-right align-top">
-                            {asset.status === "approved" && !asset.mintedAt && (
-                              <Button
-                                size="sm"
-                                className="bg-cyan-600 hover:bg-cyan-500 text-white"
-                                onClick={() => handleDeposit(asset.id)}
-                                disabled={depositAsset.isPending}
-                                data-testid={`button-deposit-${asset.id}`}
-                              >
-                                <DollarSign className="h-4 w-4 mr-1" /> Deposit &
-                                Mint
-                              </Button>
-                            )}
-                            {asset.status === "approved" && asset.mintedAt && (
-                              <span className="text-cyan-400 text-xs font-mono">
-                                ✓ Minted
-                              </span>
-                            )}
-                            {asset.status === "pending" && (
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-green-500/40 text-green-400 hover:text-green-300 hover:bg-green-500/10"
-                                  onClick={() => handleApprove(asset.id)}
-                                  disabled={approveAsset.isPending}
-                                  data-testid={`button-approve-${asset.id}`}
-                                >
-                                  <CheckCircle2 className="h-4 w-4 mr-1" />{" "}
-                                  Approve
-                                </Button>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-zinc-400 text-xs font-mono">
+                        Target Wallet (Growth Recipient) *
+                      </label>
+                      <select
+                        value={mintForm.targetWallet}
+                        onChange={(e) =>
+                          setMintForm({
+                            ...mintForm,
+                            targetWallet: e.target.value,
+                          })
+                        }
+                        className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                        data-testid="select-target-wallet"
+                      >
+                        <option value="">— Select Wallet —</option>
+                        {allWallets.map((a) => (
+                          <option key={a.accountNumber} value={a.accountNumber}>
+                            {a.name} ({a.accountNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                                <Dialog
-                                  open={rejectId === asset.id}
-                                  onOpenChange={(open) =>
-                                    !open && setRejectId(null)
-                                  }
-                                >
-                                  <DialogTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                      onClick={() => setRejectId(asset.id)}
-                                      data-testid={`button-reject-${asset.id}`}
-                                    >
-                                      <XCircle className="h-4 w-4 mr-1" /> Reject
-                                    </Button>
-                                  </DialogTrigger>
-                                  <DialogContent>
-                                    <DialogHeader>
-                                      <DialogTitle>
-                                        Reject Verification
-                                      </DialogTitle>
-                                    </DialogHeader>
-                                    <div className="py-4">
-                                      <Textarea
-                                        placeholder="State the reason for rejection (required, min 5 chars)..."
-                                        value={rejectReason}
-                                        onChange={(e) =>
-                                          setRejectReason(e.target.value)
-                                        }
-                                        data-testid="input-reject-reason"
-                                      />
-                                    </div>
-                                    <DialogFooter>
-                                      <Button
-                                        variant="outline"
-                                        onClick={() => setRejectId(null)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        variant="destructive"
-                                        onClick={handleReject}
-                                        disabled={
-                                          rejectReason.length < 5 ||
-                                          rejectAsset.isPending
-                                        }
-                                        data-testid="button-confirm-reject"
-                                      >
-                                        Confirm Rejection
-                                      </Button>
-                                    </DialogFooter>
-                                  </DialogContent>
-                                </Dialog>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                    <div>
+                      <label className="text-zinc-400 text-xs font-mono">
+                        Asset Document Registry Info *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Plot No 42, 500 Sq Yards Certificate"
+                        value={mintForm.assetTitle}
+                        onChange={(e) =>
+                          setMintForm({
+                            ...mintForm,
+                            assetTitle: e.target.value,
+                          })
+                        }
+                        className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                        data-testid="input-asset-title"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-zinc-400 text-xs font-mono">
+                        Asset Valuation in INR (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        placeholder="e.g., 5000000"
+                        value={mintForm.inrValue}
+                        onChange={(e) =>
+                          setMintForm({ ...mintForm, inrValue: e.target.value })
+                        }
+                        className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                        data-testid="input-inr-value"
+                      />
+                      {gravityPreview > 0 && (
+                        <p className="text-cyan-400 text-xs mt-1 font-mono">
+                          ✨ Liquidity Expansion: {fmt(gravityPreview)} Gravity
+                          Notes
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="bg-black/50 border border-zinc-800 rounded-md p-3 text-[11px] font-mono space-y-1">
+                      <div className="text-zinc-400 mb-1">
+                        Sovereign Split Policy (decided ratios → accounts):
+                      </div>
+                      <div className="text-emerald-400">
+                        👑 Founder (1%) → 111111111111
+                        {gravityPreview > 0
+                          ? `: ${fmt(gravityPreview * 0.01)}`
+                          : ""}
+                      </div>
+                      <div className="text-cyan-400">
+                        🏛️ Reserve (24%) → 222222222222
+                        {gravityPreview > 0
+                          ? `: ${fmt(gravityPreview * 0.24)}`
+                          : ""}
+                      </div>
+                      <div className="text-cyan-400">
+                        ⚖️ Stability (25%) → 333333333333
+                        {gravityPreview > 0
+                          ? `: ${fmt(gravityPreview * 0.25)}`
+                          : ""}
+                      </div>
+                      <div className="text-cyan-400">
+                        🛡️ Security (25%) → 444444444444
+                        {gravityPreview > 0
+                          ? `: ${fmt(gravityPreview * 0.25)}`
+                          : ""}
+                      </div>
+                      <div className="text-green-400">
+                        📈 Growth (25%) → Target Wallet
+                        {gravityPreview > 0
+                          ? `: ${fmt(gravityPreview * 0.25)}`
+                          : ""}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleMint}
+                      disabled={mintMutation.isPending}
+                      className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-400 hover:from-cyan-500 hover:to-cyan-300 disabled:opacity-50 text-black font-extrabold rounded-md transition-all text-sm tracking-wide"
+                      data-testid="button-execute-mint"
+                    >
+                      {mintMutation.isPending
+                        ? "⏳ EXECUTING…"
+                        : "🔥 EXECUTE GRAVITY MINT & SPLIT PIPELINE"}
+                    </button>
+                  </div>
                 )}
               </div>
-            </div>
-          </>
-        )}
+            </TabsContent>
+
+            {/* Submit Asset */}
+            <TabsContent value="submit">
+              {!user ? (
+                <div className="border border-zinc-800 rounded-xl p-8 bg-zinc-950 text-center space-y-4">
+                  <p className="text-zinc-400 text-sm font-mono">
+                    Sign in to declare an asset for verification.
+                  </p>
+                  <Button
+                    onClick={() => setLocation("/dashboard")}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-white"
+                    data-testid="button-submit-login"
+                  >
+                    Sign in
+                  </Button>
+                </div>
+              ) : (
+                <div className="bg-white border rounded-xl p-6 md:p-8 shadow-sm">
+                  <Form {...form}>
+                    <form
+                      onSubmit={form.handleSubmit(onSubmit)}
+                      className="space-y-6"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField
+                          control={form.control}
+                          name="assetType"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Asset Classification</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-asset-type">
+                                    <SelectValue placeholder="Select type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="real_estate">
+                                    Real Estate
+                                  </SelectItem>
+                                  <SelectItem value="vehicle">
+                                    Vehicle (Luxury/Classic)
+                                  </SelectItem>
+                                  <SelectItem value="gold_jewelry">
+                                    Gold & Jewelry
+                                  </SelectItem>
+                                  <SelectItem value="stocks">
+                                    Equities & Bonds
+                                  </SelectItem>
+                                  <SelectItem value="business">
+                                    Business Equity
+                                  </SelectItem>
+                                  <SelectItem value="other">
+                                    Other High-Value Asset
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="claimedValue"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Estimated Value (USD)</FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-2.5 text-muted-foreground">
+                                    $
+                                  </span>
+                                  <Input
+                                    type="number"
+                                    className="pl-7 font-serif"
+                                    placeholder="1000000"
+                                    {...field}
+                                    data-testid="input-value"
+                                  />
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Detailed Description</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Provide exact details: addresses, VINs, serial numbers, or ticker symbols."
+                                className="min-h-[100px]"
+                                {...field}
+                                data-testid="input-description"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="documentNote"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Document / Reference Number</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Enter a registration / deed / certificate number, or any reference. A number alone is fine."
+                                className="min-h-[80px]"
+                                {...field}
+                                data-testid="input-doc-note"
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Optional. Provide a reference number here if you
+                              don't have a file to upload — or do both.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-medium leading-none mb-1">
+                            Proof Documents
+                          </p>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Upload images or PDFs of deeds, titles, certificates,
+                            or any supporting proof (optional).
+                          </p>
+                        </div>
+
+                        <ObjectUploader
+                          maxNumberOfFiles={5}
+                          maxFileSize={10 * 1024 * 1024}
+                          onGetUploadParameters={async (file) => {
+                            const res = await fetch(
+                              "/api/storage/uploads/request-url",
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "include",
+                                body: JSON.stringify({
+                                  name: file.name,
+                                  size: file.size,
+                                  contentType: file.type,
+                                }),
+                              },
+                            );
+                            const { uploadURL, objectPath } = await res.json();
+                            objectPathsRef.current.set(file.id, {
+                              name: file.name,
+                              objectPath,
+                            });
+                            return {
+                              method: "PUT" as const,
+                              url: uploadURL,
+                              headers: { "Content-Type": file.type },
+                            };
+                          }}
+                          onComplete={handleUploadComplete}
+                          buttonClassName="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-700 transition-colors w-full justify-center"
+                        >
+                          <FileText className="h-4 w-4" /> Upload Proof Documents
+                          (images / PDF, max 10 MB each)
+                        </ObjectUploader>
+
+                        {uploadedDocs.length > 0 && (
+                          <div className="space-y-2 mt-3">
+                            <p className="text-sm font-medium text-green-700 flex items-center gap-1">
+                              <CheckCircle2 className="h-4 w-4" />{" "}
+                              {uploadedDocs.length} document(s) attached
+                            </p>
+                            {uploadedDocs.map((doc) => (
+                              <div
+                                key={doc.objectPath}
+                                className="flex items-center justify-between bg-slate-50 border rounded px-3 py-2 text-sm"
+                              >
+                                <div className="flex items-center gap-2 text-muted-foreground truncate">
+                                  <FileText className="h-4 w-4 flex-shrink-0" />
+                                  <span className="truncate">{doc.name}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeDoc(doc.objectPath)}
+                                  className="ml-2 text-muted-foreground hover:text-destructive flex-shrink-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end gap-4 pt-4 border-t">
+                        <Button
+                          type="submit"
+                          disabled={submit.isPending}
+                          className="gap-2"
+                          data-testid="button-submit-asset"
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                          {submit.isPending
+                            ? "Submitting…"
+                            : "Submit for Verification"}
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </section>
       </div>
     </Layout>
   );
