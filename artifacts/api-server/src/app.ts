@@ -2,6 +2,8 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -40,8 +42,15 @@ if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be set.");
 }
 
+const PgSession = connectPgSimple(session);
+
+// Behind the Replit reverse proxy; required for secure cookies in production.
+app.set("trust proxy", 1);
+
 app.use(
   session({
+    // Persist sessions in Postgres so logins survive server restarts/deploys.
+    store: new PgSession({ pool, createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
