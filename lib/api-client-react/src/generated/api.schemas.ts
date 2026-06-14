@@ -93,11 +93,10 @@ export type AssetInputAssetType = typeof AssetInputAssetType[keyof typeof AssetI
 
 export const AssetInputAssetType = {
   real_estate: 'real_estate',
-  vehicle: 'vehicle',
-  gold_jewelry: 'gold_jewelry',
-  stocks: 'stocks',
-  business: 'business',
-  other: 'other',
+  debt: 'debt',
+  equity: 'equity',
+  commodity: 'commodity',
+  money_market: 'money_market',
 } as const;
 
 export interface AssetInput {

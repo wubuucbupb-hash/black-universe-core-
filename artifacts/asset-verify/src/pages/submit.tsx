@@ -19,7 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useState, useRef } from "react";
 
 const submitSchema = z.object({
-  assetType: z.enum(["real_estate", "vehicle", "gold_jewelry", "stocks", "business", "other"], {
+  assetType: z.enum(["real_estate", "debt", "equity", "commodity", "money_market"], {
     required_error: "Please select an asset type",
   }),
   claimedValue: z.coerce.number().min(1, "Value must be greater than 0"),
@@ -119,7 +119,7 @@ export default function SubmitAsset() {
           </AlertDescription>
         </Alert>
 
-        <div className="bg-white border rounded-lg p-8 shadow-sm">
+        <div className="bg-card text-card-foreground border border-card-border rounded-lg p-8 shadow-sm">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
@@ -138,11 +138,10 @@ export default function SubmitAsset() {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="real_estate">Real Estate</SelectItem>
-                          <SelectItem value="vehicle">Vehicle (Luxury/Classic)</SelectItem>
-                          <SelectItem value="gold_jewelry">Gold & Jewelry</SelectItem>
-                          <SelectItem value="stocks">Equities & Bonds</SelectItem>
-                          <SelectItem value="business">Business Equity</SelectItem>
-                          <SelectItem value="other">Other High-Value Asset</SelectItem>
+                          <SelectItem value="debt">Debt</SelectItem>
+                          <SelectItem value="equity">Equity</SelectItem>
+                          <SelectItem value="commodity">Commodity</SelectItem>
+                          <SelectItem value="money_market">Money Market</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

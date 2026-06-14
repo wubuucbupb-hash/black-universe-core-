@@ -539,7 +539,7 @@ components:
       properties:
         assetType:
           type: string
-          enum: [real_estate, vehicle, gold_jewelry, stocks, business, other]
+          enum: [real_estate, debt, equity, commodity, money_market]
         claimedValue:
           type: number
           minimum: 1

@@ -78,7 +78,7 @@ function fmt(n: number | string) {
 
 const submitSchema = z.object({
   assetType: z.enum(
-    ["real_estate", "vehicle", "gold_jewelry", "stocks", "business", "other"],
+    ["real_estate", "debt", "equity", "commodity", "money_market"],
     {
       required_error: "Please select an asset type",
     },
@@ -452,7 +452,7 @@ export default function UniverseControlSpace() {
                   </Button>
                 </div>
               ) : (
-                <div className="bg-white border rounded-xl p-6 md:p-8 shadow-sm">
+                <div className="bg-card text-card-foreground border border-card-border rounded-xl p-6 md:p-8 shadow-sm">
                   <Form {...form}>
                     <form
                       onSubmit={form.handleSubmit(onSubmit)}
@@ -478,20 +478,17 @@ export default function UniverseControlSpace() {
                                   <SelectItem value="real_estate">
                                     Real Estate
                                   </SelectItem>
-                                  <SelectItem value="vehicle">
-                                    Vehicle (Luxury/Classic)
+                                  <SelectItem value="debt">
+                                    Debt
                                   </SelectItem>
-                                  <SelectItem value="gold_jewelry">
-                                    Gold & Jewelry
+                                  <SelectItem value="equity">
+                                    Equity
                                   </SelectItem>
-                                  <SelectItem value="stocks">
-                                    Equities & Bonds
+                                  <SelectItem value="commodity">
+                                    Commodity
                                   </SelectItem>
-                                  <SelectItem value="business">
-                                    Business Equity
-                                  </SelectItem>
-                                  <SelectItem value="other">
-                                    Other High-Value Asset
+                                  <SelectItem value="money_market">
+                                    Money Market
                                   </SelectItem>
                                 </SelectContent>
                               </Select>

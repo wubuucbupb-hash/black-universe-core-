@@ -307,7 +307,7 @@ export default function Dashboard() {
                 <select
                   value={currencyCode}
                   onChange={(e) => handleCurrencyChange(e.target.value)}
-                  className="ml-auto border rounded-md px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[7.5rem]"
+                  className="ml-auto border border-zinc-700 rounded-md px-2 py-1 text-xs bg-zinc-900 text-zinc-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[7.5rem]"
                   data-testid="select-balance-currency"
                   aria-label="Display currency"
                 >
@@ -400,7 +400,7 @@ export default function Dashboard() {
                       <select
                         value={currencyCode}
                         onChange={(e) => handleCurrencyChange(e.target.value)}
-                        className="border rounded-md px-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[6rem]"
+                        className="border border-zinc-700 rounded-md px-2 text-sm bg-zinc-900 text-zinc-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[6rem]"
                         data-testid="select-transfer-currency"
                         aria-label="Transfer currency"
                       >

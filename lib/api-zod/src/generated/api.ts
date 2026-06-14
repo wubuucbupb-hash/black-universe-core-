@@ -109,7 +109,7 @@ export const submitAssetBodyDescriptionMin = 5;
 
 
 export const SubmitAssetBody = zod.object({
-  "assetType": zod.enum(['real_estate', 'vehicle', 'gold_jewelry', 'stocks', 'business', 'other']),
+  "assetType": zod.enum(['real_estate', 'debt', 'equity', 'commodity', 'money_market']),
   "claimedValue": zod.number().min(1),
   "description": zod.string().min(submitAssetBodyDescriptionMin),
   "documentNote": zod.string().nullish(),
