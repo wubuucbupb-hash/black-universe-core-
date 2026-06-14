@@ -47,6 +47,7 @@ export default function Login() {
   const [showForgot, setShowForgot] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetStep, setResetStep] = useState<"request" | "confirm">("request");
+  const [resetEmail, setResetEmail] = useState("");
 
   useEffect(() => {
     if (user) setLocation("/dashboard");
@@ -69,6 +70,7 @@ export default function Login() {
 
   const resetForgotFlow = () => {
     setResetStep("request");
+    setResetEmail("");
     requestForm.reset();
     confirmForm.reset();
   };
@@ -92,27 +94,34 @@ export default function Login() {
     );
   };
 
-  const onRequestSubmit = async (
-    values: z.infer<typeof forgotRequestSchema>,
-  ) => {
+  // Requests a reset code for `email`. Each call issues a FRESH code by email;
+  // older unused codes stay valid until they expire (30 min). Used for both the
+  // first request and the "Resend code" button on the confirm step.
+  const sendResetCode = async (email: string, isResend: boolean) => {
+    if (!email) return;
     setIsResetting(true);
     try {
       const response = await fetch("/api/users/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: values.email }),
+        body: JSON.stringify({ email }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Request failed");
       toast({
-        title: "Reset code sent",
+        title: isResend ? "New code sent" : "Reset code sent",
         description:
-          "If an account matches, a reset code has been sent to its email. Enter the code below to set a new password.",
+          "If an account matches, a reset code has been sent to its email (check your Spam folder too). Enter the latest code below to set a new password.",
       });
+      setResetEmail(email);
       // The code is delivered only to the account owner's email — never prefilled,
       // so only someone with access to that inbox can complete the reset.
-      confirmForm.reset({ token: "", newPassword: "" });
-      setResetStep("confirm");
+      if (isResend) {
+        confirmForm.setValue("token", "");
+      } else {
+        confirmForm.reset({ token: "", newPassword: "" });
+        setResetStep("confirm");
+      }
     } catch (err: any) {
       toast({
         title: "Request Failed",
@@ -123,6 +132,9 @@ export default function Login() {
       setIsResetting(false);
     }
   };
+
+  const onRequestSubmit = (values: z.infer<typeof forgotRequestSchema>) =>
+    sendResetCode(values.email, false);
 
   const onConfirmSubmit = async (
     values: z.infer<typeof forgotConfirmSchema>,
@@ -250,7 +262,8 @@ export default function Login() {
               >
                 <p className="text-sm text-muted-foreground">
                   Enter the reset code and choose a new password. The code
-                  expires in 30 minutes and can only be used once.
+                  expires in 30 minutes and can only be used once. Didn't get it?
+                  Check your Spam folder or tap Resend code.
                 </p>
                 <FormField
                   control={confirmForm.control}
@@ -286,6 +299,14 @@ export default function Login() {
                     disabled={isResetting}
                   >
                     Back
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => sendResetCode(resetEmail, true)}
+                    disabled={isResetting || !resetEmail}
+                  >
+                    Resend code
                   </Button>
                   <Button type="submit" disabled={isResetting}>
                     Update Password
