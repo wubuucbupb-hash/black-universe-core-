@@ -34,7 +34,8 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Do NOT run code review / architect for small or routine tasks — it wastes time and cost. Only do exactly what is asked. Keep work minimal and to the point.
+- User speaks Hinglish; respond in Hinglish. Very cost/time-conscious — never mention billing/credits.
 
 ## Gotchas
 
