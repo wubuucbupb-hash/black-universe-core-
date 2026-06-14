@@ -993,14 +993,14 @@ export default function Admin() {
                       <tr key={t.id} className="border-b border-zinc-900">
                         <td className="px-4 py-2 text-zinc-500">{t.id}</td>
                         <td className="px-4 py-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.type === "MINT" ? "bg-cyan-500/20 text-cyan-400" : t.type === "TRANSFER" ? "bg-purple-500/20 text-purple-400" : "bg-zinc-700 text-zinc-400"}`}>
-                            {t.type}
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${t.txType === "MINT" ? "bg-cyan-500/20 text-cyan-400" : t.txType === "P2P_TRANSFER" ? "bg-purple-500/20 text-purple-400" : t.txType === "REVERSAL" ? "bg-amber-500/20 text-amber-400" : t.txType === "DEPOSIT" ? "bg-green-500/20 text-green-400" : "bg-zinc-700 text-zinc-400"}`}>
+                            {t.txType ?? "—"}
                           </span>
                         </td>
                         <td className="px-4 py-2 text-zinc-400">{t.fromAccount ?? "SYSTEM"}</td>
                         <td className="px-4 py-2 text-zinc-400">{t.toAccount ?? "—"}</td>
                         <td className="px-4 py-2 text-right text-green-400 font-bold">{fmtG(t.amount)}</td>
-                        <td className="px-4 py-2 text-zinc-500 max-w-[160px] truncate">{t.note ?? "—"}</td>
+                        <td className="px-4 py-2 text-zinc-500 max-w-[160px] truncate">{t.description ?? "—"}</td>
                         <td className="px-4 py-2 text-zinc-600">{t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-IN") : "—"}</td>
                         <td className="px-4 py-2">
                           {t.reversedAt ? (
