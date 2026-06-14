@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/hooks/use-toast";
@@ -7,69 +7,16 @@ import {
   useListMyAssets,
   getListMyAssetsQueryKey,
 } from "@workspace/api-client-react";
+import {
+  GRAVITY_RATE,
+  STATIC_INR_PER_UNIT,
+  currencyOptions,
+  currencySymbol,
+  detectDefaultCurrency,
+  fetchInrPerUnitRates,
+} from "@/lib/currency";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-// ₹10,000 of local currency = 1 Gravity (matches the system mint pipeline).
-const GRAVITY_RATE = 10000;
-
-// Local-currency options for the transfer form. `inrPerUnit` = how many INR
-// equal one unit of the currency. Gravity stays anchored at ₹10,000 = 1 Gravity,
-// so every other currency converts through its INR value. Rates are indicative.
-const CURRENCIES = [
-  { code: "INR", symbol: "₹", label: "Indian Rupee", inrPerUnit: 1 },
-  { code: "USD", symbol: "$", label: "US Dollar", inrPerUnit: 83 },
-  { code: "EUR", symbol: "€", label: "Euro", inrPerUnit: 90 },
-  { code: "GBP", symbol: "£", label: "British Pound", inrPerUnit: 105 },
-  { code: "AED", symbol: "د.إ", label: "UAE Dirham", inrPerUnit: 22.6 },
-  { code: "SGD", symbol: "S$", label: "Singapore Dollar", inrPerUnit: 62 },
-  { code: "AUD", symbol: "A$", label: "Australian Dollar", inrPerUnit: 55 },
-  { code: "CAD", symbol: "C$", label: "Canadian Dollar", inrPerUnit: 61 },
-  { code: "CNY", symbol: "¥", label: "Chinese Yuan", inrPerUnit: 11.5 },
-  { code: "JPY", symbol: "¥", label: "Japanese Yen", inrPerUnit: 0.53 },
-] as const;
-
-// Maps an ISO-3166 region to one of our supported currencies so a user outside
-// India defaults to their own currency instead of INR.
-const REGION_CURRENCY: Record<string, string> = {
-  IN: "INR",
-  US: "USD",
-  GB: "GBP",
-  AE: "AED",
-  SG: "SGD",
-  AU: "AUD",
-  CA: "CAD",
-  CN: "CNY",
-  JP: "JPY",
-  // Eurozone
-  DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", NL: "EUR", IE: "EUR",
-  PT: "EUR", AT: "EUR", BE: "EUR", FI: "EUR", GR: "EUR", LU: "EUR",
-};
-
-// Picks the default transfer currency from the browser locale's region; falls
-// back to INR when the region is unknown or unsupported.
-function detectDefaultCurrency(): string {
-  try {
-    const locales =
-      navigator.languages && navigator.languages.length
-        ? navigator.languages
-        : [navigator.language];
-    for (const loc of locales) {
-      if (!loc) continue;
-      let region: string | undefined;
-      try {
-        region = new Intl.Locale(loc).maximize().region ?? undefined;
-      } catch {
-        region = loc.split("-")[1]?.toUpperCase();
-      }
-      const code = region ? REGION_CURRENCY[region] : undefined;
-      if (code && CURRENCIES.some((c) => c.code === code)) return code;
-    }
-  } catch {
-    // ignore — fall back to INR
-  }
-  return "INR";
-}
 
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {
@@ -188,9 +135,30 @@ export default function MatrixEngine() {
   // source of truth. `currencyCode` picks which currency the input is in.
   const [inrAmount, setInrAmount] = useState("");
   const [currencyCode, setCurrencyCode] = useState(detectDefaultCurrency);
-  const selectedCurrency =
-    CURRENCIES.find((c) => c.code === currencyCode) ?? CURRENCIES[0];
-  const fxRate = selectedCurrency.inrPerUnit;
+  // Live INR-per-unit rates, seeded with the offline fallback then refreshed.
+  const [rates, setRates] = useState<Record<string, number>>(
+    () => STATIC_INR_PER_UNIT,
+  );
+  useEffect(() => {
+    let active = true;
+    fetchInrPerUnitRates()
+      .then((live) => {
+        if (active) setRates((prev) => ({ ...prev, ...live }));
+      })
+      .catch(() => {
+        // keep the static fallback rates
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const options = useMemo(() => currencyOptions(), []);
+  const selectedSymbol = currencySymbol(currencyCode);
+  // INR value of one unit of the selected currency. May be unknown for an exotic
+  // currency when offline — then the local-currency convenience input is hidden
+  // and the citizen enters Gravity directly.
+  const fxRate = rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
+  const rateKnown = typeof fxRate === "number" && fxRate > 0;
 
   const transferMutation = useMutation({
     mutationFn: (body: object) =>
@@ -425,7 +393,7 @@ export default function MatrixEngine() {
                 {/* Amount in local currency — Gravity auto-calculates from this */}
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">
-                    Amount in Local Currency ({selectedCurrency.symbol})
+                    Amount in Local Currency ({selectedSymbol})
                   </label>
                   <div className="flex gap-2 mt-1">
                     <select
@@ -433,25 +401,24 @@ export default function MatrixEngine() {
                       onChange={(e) => {
                         const nextCode = e.target.value;
                         setCurrencyCode(nextCode);
-                        const next =
-                          CURRENCIES.find((c) => c.code === nextCode) ??
-                          CURRENCIES[0];
                         // Keep the Gravity amount fixed; restate the local amount
                         // in the newly selected currency.
+                        const nextRate =
+                          rates[nextCode] ?? STATIC_INR_PER_UNIT[nextCode];
                         setInrAmount(
-                          txForm.amount
+                          txForm.amount && nextRate
                             ? String(
                                 (Number(txForm.amount) * GRAVITY_RATE) /
-                                  next.inrPerUnit,
+                                  nextRate,
                               )
                             : "",
                         );
                       }}
-                      className="bg-black border border-zinc-700 rounded-md px-2 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                      className="bg-black border border-zinc-700 rounded-md px-2 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none max-w-[8rem]"
                     >
-                      {CURRENCIES.map((c) => (
+                      {options.map((c) => (
                         <option key={c.code} value={c.code}>
-                          {c.code} ({c.symbol})
+                          {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
                         </option>
                       ))}
                     </select>
@@ -461,19 +428,27 @@ export default function MatrixEngine() {
                       step="any"
                       placeholder="e.g., 50000"
                       value={inrAmount}
+                      disabled={!rateKnown}
                       onChange={(e) => {
                         const v = e.target.value;
                         setInrAmount(v);
                         setTxForm((f) => ({
                           ...f,
-                          amount: v
-                            ? String((Number(v) * fxRate) / GRAVITY_RATE)
-                            : "",
+                          amount:
+                            v && rateKnown
+                              ? String((Number(v) * fxRate) / GRAVITY_RATE)
+                              : f.amount,
                         }));
                       }}
-                      className="flex-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                      className="flex-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none disabled:opacity-50"
                     />
                   </div>
+                  {!rateKnown && (
+                    <p className="text-amber-500/80 text-[11px] mt-1 font-mono">
+                      Live rate for {currencyCode} unavailable — enter Gravity
+                      directly below.
+                    </p>
+                  )}
                 </div>
 
                 {/* Gravity — auto-filled from INR, but still editable directly */}
@@ -491,14 +466,20 @@ export default function MatrixEngine() {
                       const v = e.target.value;
                       setTxForm((f) => ({ ...f, amount: v }));
                       setInrAmount(
-                        v ? String((Number(v) * GRAVITY_RATE) / fxRate) : "",
+                        v && rateKnown
+                          ? String((Number(v) * GRAVITY_RATE) / fxRate)
+                          : "",
                       );
                     }}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
                   />
                   <p className="text-zinc-500 text-[11px] mt-1 font-mono">
-                    1 Gravity = {selectedCurrency.symbol}
-                    {fmt(GRAVITY_RATE / fxRate)}
+                    {rateKnown && (
+                      <>
+                        1 Gravity = {selectedSymbol}
+                        {fmt(GRAVITY_RATE / fxRate)}
+                      </>
+                    )}
                     {Number(txForm.amount) > 0 && (
                       <>
                         {" · "}Receiver gets full {fmt(Number(txForm.amount))} · 1%

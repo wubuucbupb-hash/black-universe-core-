@@ -8,3 +8,5 @@
 - [object storage has no delete](object-storage-no-delete.md) — destructive admin deletes (asset/user/account) orphan documentUrls files; app-wide accepted gap, don't fix in one route only.
 - [api-server has no tsx](api-server-no-tsx.md) — run one-off TS scripts that import @workspace/db by esbuild-bundling (native deps external), not tsx/node; python3 also absent.
 - [PG session store](pg-session-store.md) — sessions are Postgres-backed (connect-pg-simple); it MUST be esbuild-external or table.sql ENOENT silently breaks sessions (login 200, next req 401).
+- [Universal currency + live FX](universal-currency-fx.md) — transfer form supports ANY world currency via Intl + live open.er-api.com rates (INR base); Gravity anchored ₹10000=1; keep static fallback, don't revert to hardcoded list.
+- [Expo merge breaks shadcn typecheck](expo-merge-types-react-dup.md) — after mobile artifact merged, asset-verify typecheck fails in shadcn UI files (duplicate @types/react); not feature-caused, app still runs.
