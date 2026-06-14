@@ -17,10 +17,18 @@ valid, unexpired, unused token; marks it used atomically).
 email + new password. Those routes were deleted.
 
 **How to apply:** Never re-add a reset route that changes a password from
-email/phone alone. No email/SMS provider is wired, so the raw token is logged
-server-side and ALSO returned in the response ONLY when
-`NODE_ENV !== "production"` (dev/preview self-serve). In production the token is
-never returned — wire a real delivery channel before relying on prod reset.
+email/phone alone. The raw token is logged server-side and ALSO returned in the
+response ONLY when `NODE_ENV !== "production"` (dev/preview self-serve); in
+production the token is never returned.
+
+Delivery is wired via the Replit **Gmail connector** (`google-mail`) in
+`lib/notify.ts` (`sendPasswordResetCode`), sent through `@replit/connectors-sdk`
+`connectors.proxy(...)` — no API key stored; the connected Gmail account is the
+sender. SMS/Twilio and Resend were intentionally dropped (cost + India DLT
+hassle for SMS; user did not want to manage an email-provider/domain). Do not
+re-introduce them without reason. Caveat: real users only receive mail once a
+real (non-personal) Gmail is connected and, for arbitrary recipients, the
+account can send normally; the testing posture used a dedicated app Gmail.
 
 ## Asset document serving
 `GET /storage/objects/*` requires a session AND that the caller either owns an

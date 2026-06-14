@@ -5,6 +5,7 @@ import { db, usersTable, passwordResetTokensTable } from "@workspace/db";
 import { eq, or, and, gt, isNull, desc } from "drizzle-orm";
 import { provisionCitizenAccount, VALID_CLUSTERS } from "../lib/matrixEngine";
 import { issueAuthToken } from "../lib/authToken";
+import { sendPasswordResetCode } from "../lib/notify";
 
 // Password-reset tokens live for 30 minutes and are single-use.
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -248,6 +249,14 @@ router.post("/users/forgot-password", async (req, res): Promise<void> => {
     req.log.info(
       { userId: user.id, expiresAt },
       "Password reset token issued (deliver out-of-band)",
+    );
+
+    // Deliver the code to the account owner by email. Never throws; failures are
+    // logged inside the notifier so we keep the response generic.
+    const delivery = await sendPasswordResetCode({ email: user.email }, token);
+    req.log.info(
+      { userId: user.id, delivery },
+      "Password reset code delivery attempted",
     );
 
     const isProduction = process.env.NODE_ENV === "production";
