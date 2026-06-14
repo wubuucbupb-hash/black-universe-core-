@@ -13,6 +13,22 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 // ₹10,000 of local currency = 1 Gravity (matches the system mint pipeline).
 const GRAVITY_RATE = 10000;
 
+// Local-currency options for the transfer form. `inrPerUnit` = how many INR
+// equal one unit of the currency. Gravity stays anchored at ₹10,000 = 1 Gravity,
+// so every other currency converts through its INR value. Rates are indicative.
+const CURRENCIES = [
+  { code: "INR", symbol: "₹", label: "Indian Rupee", inrPerUnit: 1 },
+  { code: "USD", symbol: "$", label: "US Dollar", inrPerUnit: 83 },
+  { code: "EUR", symbol: "€", label: "Euro", inrPerUnit: 90 },
+  { code: "GBP", symbol: "£", label: "British Pound", inrPerUnit: 105 },
+  { code: "AED", symbol: "د.إ", label: "UAE Dirham", inrPerUnit: 22.6 },
+  { code: "SGD", symbol: "S$", label: "Singapore Dollar", inrPerUnit: 62 },
+  { code: "AUD", symbol: "A$", label: "Australian Dollar", inrPerUnit: 55 },
+  { code: "CAD", symbol: "C$", label: "Canadian Dollar", inrPerUnit: 61 },
+  { code: "CNY", symbol: "¥", label: "Chinese Yuan", inrPerUnit: 11.5 },
+  { code: "JPY", symbol: "¥", label: "Japanese Yen", inrPerUnit: 0.53 },
+] as const;
+
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
@@ -126,8 +142,13 @@ export default function MatrixEngine() {
     receiverAccount: "",
     amount: "",
   });
-  // INR is a convenience input; Gravity (txForm.amount) stays the source of truth.
+  // Local currency is a convenience input; Gravity (txForm.amount) stays the
+  // source of truth. `currencyCode` picks which currency the input is in.
   const [inrAmount, setInrAmount] = useState("");
+  const [currencyCode, setCurrencyCode] = useState("INR");
+  const selectedCurrency =
+    CURRENCIES.find((c) => c.code === currencyCode) ?? CURRENCIES[0];
+  const fxRate = selectedCurrency.inrPerUnit;
 
   const transferMutation = useMutation({
     mutationFn: (body: object) =>
@@ -362,24 +383,55 @@ export default function MatrixEngine() {
                 {/* Amount in local currency — Gravity auto-calculates from this */}
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">
-                    Amount in Local Currency (₹)
+                    Amount in Local Currency ({selectedCurrency.symbol})
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10000"
-                    placeholder="e.g., 50000"
-                    value={inrAmount}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setInrAmount(v);
-                      setTxForm((f) => ({
-                        ...f,
-                        amount: v ? String(Number(v) / GRAVITY_RATE) : "",
-                      }));
-                    }}
-                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                  />
+                  <div className="flex gap-2 mt-1">
+                    <select
+                      value={currencyCode}
+                      onChange={(e) => {
+                        const nextCode = e.target.value;
+                        setCurrencyCode(nextCode);
+                        const next =
+                          CURRENCIES.find((c) => c.code === nextCode) ??
+                          CURRENCIES[0];
+                        // Keep the Gravity amount fixed; restate the local amount
+                        // in the newly selected currency.
+                        setInrAmount(
+                          txForm.amount
+                            ? String(
+                                (Number(txForm.amount) * GRAVITY_RATE) /
+                                  next.inrPerUnit,
+                              )
+                            : "",
+                        );
+                      }}
+                      className="bg-black border border-zinc-700 rounded-md px-2 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                    >
+                      {CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} ({c.symbol})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="e.g., 50000"
+                      value={inrAmount}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setInrAmount(v);
+                        setTxForm((f) => ({
+                          ...f,
+                          amount: v
+                            ? String((Number(v) * fxRate) / GRAVITY_RATE)
+                            : "",
+                        }));
+                      }}
+                      className="flex-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 {/* Gravity — auto-filled from INR, but still editable directly */}
@@ -396,12 +448,15 @@ export default function MatrixEngine() {
                     onChange={(e) => {
                       const v = e.target.value;
                       setTxForm((f) => ({ ...f, amount: v }));
-                      setInrAmount(v ? String(Number(v) * GRAVITY_RATE) : "");
+                      setInrAmount(
+                        v ? String((Number(v) * GRAVITY_RATE) / fxRate) : "",
+                      );
                     }}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
                   />
                   <p className="text-zinc-500 text-[11px] mt-1 font-mono">
-                    1 Gravity = ₹{fmt(GRAVITY_RATE)}
+                    1 Gravity = {selectedCurrency.symbol}
+                    {fmt(GRAVITY_RATE / fxRate)}
                     {Number(txForm.amount) > 0 && (
                       <>
                         {" · "}Receiver gets full {fmt(Number(txForm.amount))} · 1%
