@@ -105,15 +105,13 @@ export default function Login() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Request failed");
       toast({
-        title: "Reset code issued",
+        title: "Reset code sent",
         description:
-          data.token != null
-            ? "A reset code was generated. Enter it below to set a new password."
-            : "If an account matches, a reset code has been issued. Enter it below.",
+          "If an account matches, a reset code has been sent to its email. Enter the code below to set a new password.",
       });
-      // In development/preview the server returns the token so the flow is
-      // self-serve; prefill it. In production it arrives out-of-band.
-      confirmForm.reset({ token: data.token ?? "", newPassword: "" });
+      // The code is delivered only to the account owner's email — never prefilled,
+      // so only someone with access to that inbox can complete the reset.
+      confirmForm.reset({ token: "", newPassword: "" });
       setResetStep("confirm");
     } catch (err: any) {
       toast({

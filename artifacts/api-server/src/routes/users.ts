@@ -206,10 +206,10 @@ router.post("/users/logout", async (req, res): Promise<void> => {
 // account. The token is never derivable from the email — it is random and only
 // its SHA-256 hash is stored. It must reach the account owner out-of-band.
 //
-// NOTE: No email/SMS provider is wired up yet, so the raw token is logged
-// server-side for out-of-band delivery. As a convenience for development and
-// preview environments only, it is also returned in the response body; in
-// production the token is NEVER returned to the caller.
+// The token is delivered ONLY to the account owner's email (Gmail connector) and
+// is NEVER returned in the response — not even in dev/preview. A caller who only
+// knows an email address must have access to that inbox to complete the reset, so
+// nobody can reset another person's password just by submitting their email.
 router.post("/users/forgot-password", async (req, res): Promise<void> => {
   try {
     const { email } = req.body ?? {};
@@ -259,11 +259,7 @@ router.post("/users/forgot-password", async (req, res): Promise<void> => {
       "Password reset code delivery attempted",
     );
 
-    const isProduction = process.env.NODE_ENV === "production";
-    res.json({
-      message: genericMessage,
-      ...(isProduction ? {} : { token }),
-    });
+    res.json({ message: genericMessage });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Request failed";
     res.status(500).json({ error: msg });
