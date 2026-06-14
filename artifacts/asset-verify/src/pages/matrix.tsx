@@ -10,6 +10,9 @@ import {
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// ₹10,000 of local currency = 1 Gravity (matches the system mint pipeline).
+const GRAVITY_RATE = 10000;
+
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
@@ -123,6 +126,8 @@ export default function MatrixEngine() {
     receiverAccount: "",
     amount: "",
   });
+  // INR is a convenience input; Gravity (txForm.amount) stays the source of truth.
+  const [inrAmount, setInrAmount] = useState("");
 
   const transferMutation = useMutation({
     mutationFn: (body: object) =>
@@ -136,6 +141,7 @@ export default function MatrixEngine() {
         description: `Received: ${fmt(data.received)} Gravity (1% tax: ${fmt(data.tax)})`,
       });
       setTxForm({ senderAccount: "", receiverAccount: "", amount: "" });
+      setInrAmount("");
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
       qc.invalidateQueries({ queryKey: ["my-transactions"] });
     },
@@ -336,7 +342,30 @@ export default function MatrixEngine() {
                   </select>
                 </div>
 
-                {/* Amount */}
+                {/* Amount in local currency — Gravity auto-calculates from this */}
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    Amount in Local Currency (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10000"
+                    placeholder="e.g., 50000"
+                    value={inrAmount}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setInrAmount(v);
+                      setTxForm((f) => ({
+                        ...f,
+                        amount: v ? String(Number(v) / GRAVITY_RATE) : "",
+                      }));
+                    }}
+                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Gravity — auto-filled from INR, but still editable directly */}
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">
                     Amount (Gravity)
@@ -344,20 +373,25 @@ export default function MatrixEngine() {
                   <input
                     type="number"
                     min="0"
-                    step="100"
+                    step="1"
                     placeholder="0.00"
                     value={txForm.amount}
-                    onChange={(e) =>
-                      setTxForm({ ...txForm, amount: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setTxForm((f) => ({ ...f, amount: v }));
+                      setInrAmount(v ? String(Number(v) * GRAVITY_RATE) : "");
+                    }}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
                   />
-                  {Number(txForm.amount) > 0 && (
-                    <p className="text-zinc-500 text-[11px] mt-1 font-mono">
-                      Receiver gets {fmt(Number(txForm.amount) * 0.99)} | Tax:{" "}
-                      {fmt(Number(txForm.amount) * 0.01)} → Founder
-                    </p>
-                  )}
+                  <p className="text-zinc-500 text-[11px] mt-1 font-mono">
+                    1 Gravity = ₹{fmt(GRAVITY_RATE)}
+                    {Number(txForm.amount) > 0 && (
+                      <>
+                        {" · "}Receiver gets {fmt(Number(txForm.amount) * 0.99)} |
+                        Tax: {fmt(Number(txForm.amount) * 0.01)} → Founder
+                      </>
+                    )}
+                  </p>
                 </div>
 
                 <button
