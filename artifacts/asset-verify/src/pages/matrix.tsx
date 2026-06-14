@@ -29,6 +29,48 @@ const CURRENCIES = [
   { code: "JPY", symbol: "¥", label: "Japanese Yen", inrPerUnit: 0.53 },
 ] as const;
 
+// Maps an ISO-3166 region to one of our supported currencies so a user outside
+// India defaults to their own currency instead of INR.
+const REGION_CURRENCY: Record<string, string> = {
+  IN: "INR",
+  US: "USD",
+  GB: "GBP",
+  AE: "AED",
+  SG: "SGD",
+  AU: "AUD",
+  CA: "CAD",
+  CN: "CNY",
+  JP: "JPY",
+  // Eurozone
+  DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", NL: "EUR", IE: "EUR",
+  PT: "EUR", AT: "EUR", BE: "EUR", FI: "EUR", GR: "EUR", LU: "EUR",
+};
+
+// Picks the default transfer currency from the browser locale's region; falls
+// back to INR when the region is unknown or unsupported.
+function detectDefaultCurrency(): string {
+  try {
+    const locales =
+      navigator.languages && navigator.languages.length
+        ? navigator.languages
+        : [navigator.language];
+    for (const loc of locales) {
+      if (!loc) continue;
+      let region: string | undefined;
+      try {
+        region = new Intl.Locale(loc).maximize().region ?? undefined;
+      } catch {
+        region = loc.split("-")[1]?.toUpperCase();
+      }
+      const code = region ? REGION_CURRENCY[region] : undefined;
+      if (code && CURRENCIES.some((c) => c.code === code)) return code;
+    }
+  } catch {
+    // ignore — fall back to INR
+  }
+  return "INR";
+}
+
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
@@ -145,7 +187,7 @@ export default function MatrixEngine() {
   // Local currency is a convenience input; Gravity (txForm.amount) stays the
   // source of truth. `currencyCode` picks which currency the input is in.
   const [inrAmount, setInrAmount] = useState("");
-  const [currencyCode, setCurrencyCode] = useState("INR");
+  const [currencyCode, setCurrencyCode] = useState(detectDefaultCurrency);
   const selectedCurrency =
     CURRENCIES.find((c) => c.code === currencyCode) ?? CURRENCIES[0];
   const fxRate = selectedCurrency.inrPerUnit;
