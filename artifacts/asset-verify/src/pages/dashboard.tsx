@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useMemo, type FormEvent } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Layout } from "@/components/layout";
 import { useLocation } from "wouter";
@@ -11,6 +11,13 @@ import {
   useDeleteAsset,
 } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  GRAVITY_RATE,
+  STATIC_INR_PER_UNIT,
+  currencyOptions,
+  currencySymbol,
+  fetchInrPerUnitRates,
+} from "@/lib/currency";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -34,6 +41,7 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [txForm, setTxForm] = useState({ receiverAccount: "", amount: "" });
+  const [localAmount, setLocalAmount] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -62,6 +70,44 @@ export default function Dashboard() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+  }
+
+  // ── Local-currency display (default INR; user can pick any world currency) ────
+  const [currencyCode, setCurrencyCode] = useState(
+    () => localStorage.getItem("bu_pref_currency") || "INR",
+  );
+  const [rates, setRates] = useState<Record<string, number>>(
+    () => STATIC_INR_PER_UNIT,
+  );
+  useEffect(() => {
+    let active = true;
+    fetchInrPerUnitRates()
+      .then((live) => {
+        if (active) setRates((prev) => ({ ...prev, ...live }));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  const currencyList = useMemo(() => currencyOptions(), []);
+  const selectedSymbol = currencySymbol(currencyCode);
+  const fxRate = rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
+  const rateKnown = typeof fxRate === "number" && fxRate > 0;
+
+  function handleCurrencyChange(next: string) {
+    setCurrencyCode(next);
+    try {
+      localStorage.setItem("bu_pref_currency", next);
+    } catch {
+      // ignore storage write errors
+    }
+    const nextRate = rates[next] ?? STATIC_INR_PER_UNIT[next];
+    setLocalAmount(
+      txForm.amount && nextRate
+        ? String((Number(txForm.amount) * GRAVITY_RATE) / nextRate)
+        : "",
+    );
   }
 
   const { data: summary, isLoading: isSummaryLoading } = useGetMyAssetSummary({
@@ -164,6 +210,7 @@ export default function Dashboard() {
         description: `Sent ${fmtG(data.received)} G (1% network fee applied).`,
       });
       setTxForm({ receiverAccount: "", amount: "" });
+      setLocalAmount("");
       queryClient.invalidateQueries({ queryKey: ["matrix-accounts"] });
     } catch (err) {
       toast({
@@ -247,6 +294,30 @@ export default function Dashboard() {
               >
                 {fmtG(myGravity)} <span className="text-2xl">G</span>
               </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span
+                  className="text-sm font-semibold text-primary"
+                  data-testid="text-gravity-balance-local"
+                >
+                  ≈{" "}
+                  {rateKnown
+                    ? `${selectedSymbol}${fmtG((myGravity * GRAVITY_RATE) / fxRate)}`
+                    : "—"}
+                </span>
+                <select
+                  value={currencyCode}
+                  onChange={(e) => handleCurrencyChange(e.target.value)}
+                  className="ml-auto border rounded-md px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[7.5rem]"
+                  data-testid="select-balance-currency"
+                  aria-label="Display currency"
+                >
+                  {currencyList.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <p className="text-xs text-muted-foreground mt-1 font-mono">
                 {user.accountNumber
                   ? `Wallet ${user.accountNumber}`
@@ -321,6 +392,46 @@ export default function Dashboard() {
                       data-testid="input-transfer-recipient"
                     />
                   </div>
+                  <div className="w-full sm:w-56">
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Amount in {selectedSymbol}
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={currencyCode}
+                        onChange={(e) => handleCurrencyChange(e.target.value)}
+                        className="border rounded-md px-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[6rem]"
+                        data-testid="select-transfer-currency"
+                        aria-label="Transfer currency"
+                      >
+                        {currencyList.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.code}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={localAmount}
+                        disabled={!rateKnown}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setLocalAmount(v);
+                          setTxForm((f) => ({
+                            ...f,
+                            amount:
+                              v && rateKnown
+                                ? String((Number(v) * fxRate) / GRAVITY_RATE)
+                                : "",
+                          }));
+                        }}
+                        placeholder="e.g. 50000"
+                        data-testid="input-transfer-local-amount"
+                      />
+                    </div>
+                  </div>
                   <div className="w-full sm:w-44">
                     <label className="text-xs text-muted-foreground mb-1 block">
                       Amount (G)
@@ -330,9 +441,15 @@ export default function Dashboard() {
                       min="0"
                       step="0.01"
                       value={txForm.amount}
-                      onChange={(e) =>
-                        setTxForm({ ...txForm, amount: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTxForm({ ...txForm, amount: v });
+                        setLocalAmount(
+                          v && rateKnown
+                            ? String((Number(v) * GRAVITY_RATE) / fxRate)
+                            : "",
+                        );
+                      }}
                       placeholder="0.00"
                       data-testid="input-transfer-amount"
                     />
@@ -346,8 +463,13 @@ export default function Dashboard() {
                   </Button>
                 </form>
                 <p className="text-xs text-muted-foreground mt-3 font-mono">
-                  Available: {fmtG(myGravity)} G · A 1% network fee applies to
-                  each transfer.
+                  Available: {fmtG(myGravity)} G
+                  {rateKnown
+                    ? ` (≈ ${selectedSymbol}${fmtG((myGravity * GRAVITY_RATE) / fxRate)})`
+                    : ""}{" "}
+                  · 1 G ={" "}
+                  {rateKnown ? `${selectedSymbol}${fmtG(GRAVITY_RATE / fxRate)}` : "—"} ·
+                  A 1% network fee applies to each transfer.
                 </p>
               </>
             ) : (
