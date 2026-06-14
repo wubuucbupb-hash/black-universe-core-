@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { db, matrixAccountsTable, matrixTransactionsTable, usersTable } from "@workspace/db";
-import { eq, desc, isNull } from "drizzle-orm";
+import { eq, desc, isNull, or } from "drizzle-orm";
 import {
   FOUNDER_ACCOUNT,
   GROWTH_ACCOUNT,
@@ -78,6 +78,30 @@ router.get("/matrix/logs", async (_req, res): Promise<void> => {
     .orderBy(desc(matrixTransactionsTable.createdAt))
     .limit(50);
   res.json({ logs });
+});
+
+// ── GET /api/matrix/my-transactions ────────────────────────────────────────
+// The logged-in citizen's own transfer history (where they are the sender or
+// receiver). Powers the user-facing activity panel.
+router.get("/matrix/my-transactions", async (req, res): Promise<void> => {
+  const user = await getAuthUser(req, res);
+  if (!user) return;
+  if (!user.accountNumber) {
+    res.json({ accountNumber: null, transactions: [] });
+    return;
+  }
+  const transactions = await db
+    .select()
+    .from(matrixTransactionsTable)
+    .where(
+      or(
+        eq(matrixTransactionsTable.fromAccount, user.accountNumber),
+        eq(matrixTransactionsTable.toAccount, user.accountNumber),
+      ),
+    )
+    .orderBy(desc(matrixTransactionsTable.createdAt))
+    .limit(50);
+  res.json({ accountNumber: user.accountNumber, transactions });
 });
 
 // ── POST /api/matrix/mint ──────────────────────────────────────────────────
