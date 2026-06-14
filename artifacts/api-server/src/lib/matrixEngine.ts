@@ -2,10 +2,9 @@ import {
   db,
   matrixAccountsTable,
   matrixTransactionsTable,
-  clusterCountersTable,
   usersTable,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, like } from "drizzle-orm";
 
 // Either the root db handle or a transaction handle from db.transaction(...).
 // Lets callers run engine operations inside an atomic transaction.
@@ -176,41 +175,63 @@ export async function provisionCitizenAccount(
     ? (params.cluster as string)
     : DEFAULT_CLUSTER;
 
-  // Ensure the cluster counter exists, then atomically increment it.
-  await exec
-    .insert(clusterCountersTable)
-    .values({ clusterPrefix: cluster, nextCounter: 1 })
-    .onConflictDoNothing();
+  // Allocate the LOWEST free account number in the cluster. Numbers freed by
+  // deleted accounts are therefore reused — auto-allotted to the next real
+  // citizen — instead of being skipped forever by a monotonic counter. The
+  // accountNumber primary key guarantees uniqueness; on a concurrent collision
+  // we recompute the lowest gap and retry.
+  const MAX_ATTEMPTS = 50;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const taken = await exec
+      .select({ accountNumber: matrixAccountsTable.accountNumber })
+      .from(matrixAccountsTable)
+      .where(like(matrixAccountsTable.accountNumber, `${cluster}%`));
 
-  const [counter] = await exec
-    .update(clusterCountersTable)
-    .set({ nextCounter: sql`${clusterCountersTable.nextCounter} + 1` })
-    .where(eq(clusterCountersTable.clusterPrefix, cluster))
-    .returning();
+    const usedCounters = new Set<number>();
+    for (const row of taken) {
+      const acct = row.accountNumber;
+      if (acct.length === 12 && acct.startsWith(cluster)) {
+        const n = Number(acct.slice(1));
+        if (Number.isInteger(n) && n > 0) usedCounters.add(n);
+      }
+    }
 
-  const suffix = String(counter.nextCounter - 1).padStart(11, "0");
-  const accountNumber = cluster + suffix;
+    let counter = 1;
+    while (usedCounters.has(counter)) counter++;
 
-  await exec.insert(matrixAccountsTable).values({
-    accountNumber,
-    name: name.trim(),
-    type: CLUSTER_LABELS[cluster] ?? "Citizen",
-    cluster,
-    phone: phone?.trim() || null,
-    email: email?.trim() || null,
-    gravityBalance: "0",
-  });
+    const accountNumber = cluster + String(counter).padStart(11, "0");
 
-  await logTx(
-    "CITIZEN_REGISTER",
-    `✅ [CITIZEN] Account Created: ${accountNumber} — ${name.trim()}`,
-    undefined,
-    accountNumber,
-    "0",
-    exec,
+    const inserted = await exec
+      .insert(matrixAccountsTable)
+      .values({
+        accountNumber,
+        name: name.trim(),
+        type: CLUSTER_LABELS[cluster] ?? "Citizen",
+        cluster,
+        phone: phone?.trim() || null,
+        email: email?.trim() || null,
+        gravityBalance: "0",
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (inserted.length > 0) {
+      await logTx(
+        "CITIZEN_REGISTER",
+        `✅ [CITIZEN] Account Created: ${accountNumber} — ${name.trim()}`,
+        undefined,
+        accountNumber,
+        "0",
+        exec,
+      );
+      return accountNumber;
+    }
+    // A concurrent registration claimed this number — recompute and retry.
+  }
+
+  throw new Error(
+    `Could not allocate an account number in cluster ${cluster}`,
   );
-
-  return accountNumber;
 }
 
 /**
