@@ -62,7 +62,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<string>(tabFromHash);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{
-    kind: "account" | "user";
+    kind: "account" | "user" | "asset";
     id: string;
     label: string;
   } | null>(null);
@@ -245,6 +245,7 @@ export default function Admin() {
   const invalidateManagement = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-matrix-accounts"] });
     queryClient.invalidateQueries({ queryKey: getAdminListUsersQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getAdminListAssetsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
   };
 
@@ -327,6 +328,14 @@ export default function Admin() {
         "DELETE",
         "Account Deleted",
         `Account ${id} permanently deleted.`,
+      );
+    } else if (kind === "asset") {
+      await runAdminAction(
+        `asset:${id}`,
+        `/api/admin/assets/${id}`,
+        "DELETE",
+        "Asset Deleted",
+        "Asset permanently removed from the registry.",
       );
     } else {
       await runAdminAction(
@@ -556,91 +565,111 @@ export default function Admin() {
                           {formatDate(asset.createdAt)}
                         </td>
                         <td className="px-4 py-2 text-right align-top">
-                          {asset.status === "approved" && !asset.mintedAt && (
-                            <Button
-                              size="sm"
-                              className="bg-cyan-600 hover:bg-cyan-500 text-white"
-                              onClick={() => handleDeposit(asset.id)}
-                              disabled={depositAsset.isPending}
-                              data-testid={`button-deposit-${asset.id}`}
-                            >
-                              <DollarSign className="h-4 w-4 mr-1" /> Deposit & Mint
-                            </Button>
-                          )}
-                          {asset.status === "approved" && asset.mintedAt && (
-                            <span className="text-cyan-400 text-xs font-mono">
-                              ✓ Minted
-                            </span>
-                          )}
-                          {asset.status === "pending" && (
-                            <div className="flex justify-end gap-2">
+                          <div className="flex justify-end items-center gap-2 flex-wrap">
+                            {asset.status === "approved" && !asset.mintedAt && (
+                              <Button
+                                size="sm"
+                                className="bg-cyan-600 hover:bg-cyan-500 text-white"
+                                onClick={() => handleDeposit(asset.id)}
+                                disabled={depositAsset.isPending}
+                                data-testid={`button-deposit-${asset.id}`}
+                              >
+                                <DollarSign className="h-4 w-4 mr-1" /> Deposit & Mint
+                              </Button>
+                            )}
+                            {asset.status === "approved" && asset.mintedAt && (
+                              <span className="text-cyan-400 text-xs font-mono">
+                                ✓ Minted
+                              </span>
+                            )}
+                            {asset.status === "pending" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-green-500/40 text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                                  onClick={() => handleApprove(asset.id)}
+                                  disabled={approveAsset.isPending}
+                                  data-testid={`button-approve-${asset.id}`}
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
+                                </Button>
+
+                                <Dialog
+                                  open={rejectId === asset.id}
+                                  onOpenChange={(open) =>
+                                    !open && setRejectId(null)
+                                  }
+                                >
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                      onClick={() => setRejectId(asset.id)}
+                                      data-testid={`button-reject-${asset.id}`}
+                                    >
+                                      <XCircle className="h-4 w-4 mr-1" /> Reject
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>
+                                        Reject Verification
+                                      </DialogTitle>
+                                    </DialogHeader>
+                                    <div className="py-4">
+                                      <Textarea
+                                        placeholder="State the reason for rejection (required, min 5 chars)..."
+                                        value={rejectReason}
+                                        onChange={(e) =>
+                                          setRejectReason(e.target.value)
+                                        }
+                                        data-testid="input-reject-reason"
+                                      />
+                                    </div>
+                                    <DialogFooter>
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => setRejectId(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        onClick={handleReject}
+                                        disabled={
+                                          rejectReason.length < 5 ||
+                                          rejectAsset.isPending
+                                        }
+                                        data-testid="button-confirm-reject"
+                                      >
+                                        Confirm Rejection
+                                      </Button>
+                                    </DialogFooter>
+                                  </DialogContent>
+                                </Dialog>
+                              </>
+                            )}
+                            {!asset.mintedAt && (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="border-green-500/40 text-green-400 hover:text-green-300 hover:bg-green-500/10"
-                                onClick={() => handleApprove(asset.id)}
-                                disabled={approveAsset.isPending}
-                                data-testid={`button-approve-${asset.id}`}
-                              >
-                                <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
-                              </Button>
-
-                              <Dialog
-                                open={rejectId === asset.id}
-                                onOpenChange={(open) =>
-                                  !open && setRejectId(null)
+                                disabled={busyKey === `asset:${asset.id}`}
+                                className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                onClick={() =>
+                                  setConfirmDelete({
+                                    kind: "asset",
+                                    id: String(asset.id),
+                                    label: `${asset.assetType.toUpperCase()} — ${asset.userName}`,
+                                  })
                                 }
+                                data-testid={`button-delete-asset-${asset.id}`}
                               >
-                                <DialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                    onClick={() => setRejectId(asset.id)}
-                                    data-testid={`button-reject-${asset.id}`}
-                                  >
-                                    <XCircle className="h-4 w-4 mr-1" /> Reject
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>
-                                      Reject Verification
-                                    </DialogTitle>
-                                  </DialogHeader>
-                                  <div className="py-4">
-                                    <Textarea
-                                      placeholder="State the reason for rejection (required, min 5 chars)..."
-                                      value={rejectReason}
-                                      onChange={(e) =>
-                                        setRejectReason(e.target.value)
-                                      }
-                                      data-testid="input-reject-reason"
-                                    />
-                                  </div>
-                                  <DialogFooter>
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setRejectId(null)}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      onClick={handleReject}
-                                      disabled={
-                                        rejectReason.length < 5 ||
-                                        rejectAsset.isPending
-                                      }
-                                      data-testid="button-confirm-reject"
-                                    >
-                                      Confirm Rejection
-                                    </Button>
-                                  </DialogFooter>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          )}
+                                <Trash2 className="h-4 w-4 mr-1" /> Delete
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -977,12 +1006,22 @@ export default function Admin() {
               <span className="text-white font-bold">
                 {confirmDelete?.label}
               </span>{" "}
-              and all of its data (assets, custody entries, gravity balance) will
-              be erased forever. This cannot be undone.
-              <br />
-              <br />
-              If you only want to hide a real user but keep their data, use{" "}
-              <span className="text-amber-400 font-bold">Archive</span> instead.
+              {confirmDelete?.kind === "asset" ? (
+                <>
+                  will be permanently removed from the asset registry. This
+                  cannot be undone.
+                </>
+              ) : (
+                <>
+                  and all of its data (assets, custody entries, gravity balance)
+                  will be erased forever. This cannot be undone.
+                  <br />
+                  <br />
+                  If you only want to hide a real user but keep their data, use{" "}
+                  <span className="text-amber-400 font-bold">Archive</span>{" "}
+                  instead.
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmDelete(null)}>

@@ -263,6 +263,42 @@ router.post("/admin/assets/:id/deposit", async (req, res): Promise<void> => {
   }
 });
 
+// Permanently delete a single asset submission from the registry.
+// Blocked for minted assets because their gravity is already in circulation.
+router.delete("/admin/assets/:id", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "Invalid asset id" });
+    return;
+  }
+
+  const [asset] = await db
+    .select()
+    .from(assetsTable)
+    .where(eq(assetsTable.id, id))
+    .limit(1);
+
+  if (!asset) {
+    res.status(404).json({ error: "Asset not found" });
+    return;
+  }
+
+  if (asset.mintedAt != null) {
+    res.status(409).json({
+      error:
+        "Cannot delete a minted asset; its gravity is already in circulation",
+    });
+    return;
+  }
+
+  await db.delete(assetsTable).where(eq(assetsTable.id, id));
+
+  req.log.info({ assetId: id }, "Admin deleted asset");
+  res.json({ success: true });
+});
+
 router.get("/admin/stats", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
