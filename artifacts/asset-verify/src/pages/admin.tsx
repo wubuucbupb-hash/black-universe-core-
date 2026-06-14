@@ -39,6 +39,9 @@ import {
   ShieldCheck,
   FileText,
   Hash,
+  Archive,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -57,6 +60,12 @@ export default function Admin() {
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [activeTab, setActiveTab] = useState<string>(tabFromHash);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    kind: "account" | "user";
+    id: string;
+    label: string;
+  } | null>(null);
 
   useEffect(() => {
     const onHash = () => setActiveTab(tabFromHash());
@@ -104,7 +113,7 @@ export default function Admin() {
   const { data: matrixAccounts } = useQuery({
     queryKey: ["admin-matrix-accounts"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/matrix/accounts`, { credentials: "include" });
+      const res = await fetch(`${BASE}/api/admin/accounts`, { credentials: "include" });
       if (!res.ok) return null;
       return res.json();
     },
@@ -231,6 +240,104 @@ export default function Admin() {
         },
       },
     );
+  };
+
+  const invalidateManagement = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-matrix-accounts"] });
+    queryClient.invalidateQueries({ queryKey: getAdminListUsersQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+  };
+
+  const runAdminAction = async (
+    key: string,
+    path: string,
+    method: "POST" | "DELETE",
+    okTitle: string,
+    okDesc: string,
+  ) => {
+    setBusyKey(key);
+    try {
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let msg = "Action failed.";
+        try {
+          const j = await res.json();
+          msg = j.error ?? msg;
+        } catch {
+          /* non-JSON response */
+        }
+        throw new Error(msg);
+      }
+      invalidateManagement();
+      toast({ title: okTitle, description: okDesc });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Action failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const archiveAccount = (acc: string) =>
+    runAdminAction(
+      `acc:${acc}`,
+      `/api/admin/accounts/${acc}/archive`,
+      "POST",
+      "Account Archived",
+      `Account ${acc} archived. Its data stays safe in the database.`,
+    );
+  const restoreAccount = (acc: string) =>
+    runAdminAction(
+      `acc:${acc}`,
+      `/api/admin/accounts/${acc}/restore`,
+      "POST",
+      "Account Restored",
+      `Account ${acc} is active again.`,
+    );
+  const archiveUser = (id: number) =>
+    runAdminAction(
+      `usr:${id}`,
+      `/api/admin/users/${id}/archive`,
+      "POST",
+      "User Archived",
+      "User archived. Their data stays safe in the database.",
+    );
+  const restoreUser = (id: number) =>
+    runAdminAction(
+      `usr:${id}`,
+      `/api/admin/users/${id}/restore`,
+      "POST",
+      "User Restored",
+      "User is active again.",
+    );
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
+    const { kind, id } = confirmDelete;
+    if (kind === "account") {
+      await runAdminAction(
+        `acc:${id}`,
+        `/api/admin/accounts/${id}`,
+        "DELETE",
+        "Account Deleted",
+        `Account ${id} permanently deleted.`,
+      );
+    } else {
+      await runAdminAction(
+        `usr:${id}`,
+        `/api/admin/users/${id}`,
+        "DELETE",
+        "User Deleted",
+        "User permanently deleted.",
+      );
+    }
+    setConfirmDelete(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -574,13 +681,27 @@ export default function Admin() {
                         TOTAL CLAIMED VALUE
                       </th>
                       <th className="text-left px-4 py-2">JOINED</th>
+                      <th className="text-right px-4 py-2">ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((u) => (
-                      <tr key={u.id} className="border-b border-zinc-900">
+                    {users.map((u) => {
+                      const isAdmin = u.role === "admin";
+                      const isArchived = !!(u as { archivedAt?: string | null })
+                        .archivedAt;
+                      const busy = busyKey === `usr:${u.id}`;
+                      return (
+                      <tr
+                        key={u.id}
+                        className={`border-b border-zinc-900 ${isArchived ? "opacity-50" : ""}`}
+                      >
                         <td className="px-4 py-2 text-white font-bold">
                           {u.name}
+                          {isArchived && (
+                            <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">
+                              ARCHIVED
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-2 text-zinc-400">{u.email}</td>
                         <td className="px-4 py-2">
@@ -603,8 +724,58 @@ export default function Admin() {
                         <td className="px-4 py-2 text-zinc-600">
                           {formatDate(u.createdAt)}
                         </td>
+                        <td className="px-4 py-2 text-right">
+                          {isAdmin ? (
+                            <span className="text-zinc-700 text-[10px] font-bold">
+                              PROTECTED
+                            </span>
+                          ) : (
+                            <div className="flex justify-end gap-2">
+                              {isArchived ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  className="border-cyan-500/40 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                                  onClick={() => restoreUser(u.id)}
+                                  data-testid={`button-restore-user-${u.id}`}
+                                >
+                                  <RotateCcw className="h-4 w-4 mr-1" /> Restore
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  className="border-amber-500/40 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                  onClick={() => archiveUser(u.id)}
+                                  data-testid={`button-archive-user-${u.id}`}
+                                >
+                                  <Archive className="h-4 w-4 mr-1" /> Archive
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy}
+                                className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                onClick={() =>
+                                  setConfirmDelete({
+                                    kind: "user",
+                                    id: String(u.id),
+                                    label: u.name ?? `User #${u.id}`,
+                                  })
+                                }
+                                data-testid={`button-delete-user-${u.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" /> Delete
+                              </Button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -627,20 +798,75 @@ export default function Admin() {
                       <th className="text-left px-4 py-2">TYPE</th>
                       <th className="text-left px-4 py-2">CLUSTER</th>
                       <th className="text-right px-4 py-2">GRAVITY BALANCE</th>
+                      <th className="text-right px-4 py-2">ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {allAccounts.map((acc: any) => {
                       const isSys = SYSTEM_CORES.includes(acc.accountNumber);
                       const isFounder = acc.accountNumber === "111111111111";
+                      const isArchived = !!acc.archivedAt;
+                      const busy = busyKey === `acc:${acc.accountNumber}`;
                       return (
-                        <tr key={acc.accountNumber} className={`border-b border-zinc-900 ${isFounder ? "bg-emerald-500/5" : isSys ? "bg-zinc-900/40" : "bg-cyan-500/5"}`}>
+                        <tr key={acc.accountNumber} className={`border-b border-zinc-900 ${isArchived ? "opacity-50" : ""} ${isFounder ? "bg-emerald-500/5" : isSys ? "bg-zinc-900/40" : "bg-cyan-500/5"}`}>
                           <td className={`px-4 py-2 font-bold ${isFounder ? "text-emerald-400" : isSys ? "text-red-400" : "text-cyan-400"}`}>{acc.accountNumber}</td>
-                          <td className="px-4 py-2 text-white">{acc.name}</td>
+                          <td className="px-4 py-2 text-white">
+                            {acc.name}
+                            {isArchived && (
+                              <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">ARCHIVED</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-zinc-400">{acc.type}</td>
                           <td className="px-4 py-2 text-zinc-500">{acc.cluster ?? "—"}</td>
                           <td className={`px-4 py-2 text-right font-bold ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
                             {fmtG(acc.gravityBalance)} G
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {isSys ? (
+                              <span className="text-zinc-700 text-[10px] font-bold">SYSTEM</span>
+                            ) : (
+                              <div className="flex justify-end gap-2">
+                                {isArchived ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={busy}
+                                    className="border-cyan-500/40 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                                    onClick={() => restoreAccount(acc.accountNumber)}
+                                    data-testid={`button-restore-account-${acc.accountNumber}`}
+                                  >
+                                    <RotateCcw className="h-4 w-4 mr-1" /> Restore
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={busy}
+                                    className="border-amber-500/40 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                    onClick={() => archiveAccount(acc.accountNumber)}
+                                    data-testid={`button-archive-account-${acc.accountNumber}`}
+                                  >
+                                    <Archive className="h-4 w-4 mr-1" /> Archive
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  className="border-red-500/40 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                  onClick={() =>
+                                    setConfirmDelete({
+                                      kind: "account",
+                                      id: acc.accountNumber,
+                                      label: `${acc.name} (${acc.accountNumber})`,
+                                    })
+                                  }
+                                  data-testid={`button-delete-account-${acc.accountNumber}`}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" /> Delete
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -738,6 +964,41 @@ export default function Admin() {
           </TabsContent>
 
         </Tabs>
+
+        <Dialog
+          open={!!confirmDelete}
+          onOpenChange={(open) => !open && setConfirmDelete(null)}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Permanently delete?</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 text-sm text-zinc-400">
+              <span className="text-white font-bold">
+                {confirmDelete?.label}
+              </span>{" "}
+              and all of its data (assets, custody entries, gravity balance) will
+              be erased forever. This cannot be undone.
+              <br />
+              <br />
+              If you only want to hide a real user but keep their data, use{" "}
+              <span className="text-amber-400 font-bold">Archive</span> instead.
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDelete}
+                disabled={busyKey !== null}
+                data-testid="button-confirm-delete"
+              >
+                <Trash2 className="h-4 w-4 mr-1" /> Delete permanently
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

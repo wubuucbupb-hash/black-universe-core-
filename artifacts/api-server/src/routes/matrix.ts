@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { db, matrixAccountsTable, matrixTransactionsTable, usersTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, isNull } from "drizzle-orm";
 import {
   FOUNDER_ACCOUNT,
   GROWTH_ACCOUNT,
@@ -45,6 +45,7 @@ router.get("/matrix/accounts", async (_req, res): Promise<void> => {
       createdAt: matrixAccountsTable.createdAt,
     })
     .from(matrixAccountsTable)
+    .where(isNull(matrixAccountsTable.archivedAt))
     .orderBy(matrixAccountsTable.accountNumber);
   res.json({ accounts });
 });

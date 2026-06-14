@@ -21,6 +21,7 @@ export const matrixAccountsTable = pgTable("matrix_accounts", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
 export const matrixTransactionsTable = pgTable("matrix_transactions", {

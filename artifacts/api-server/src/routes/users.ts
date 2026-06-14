@@ -161,6 +161,11 @@ router.post("/users/login", async (req, res): Promise<void> => {
     return;
   }
 
+  if (user.archivedAt) {
+    res.status(403).json({ error: "This account has been deactivated." });
+    return;
+  }
+
   req.session.userId = user.id;
   res.json({ user: userResponse(user) });
 });
@@ -179,7 +184,7 @@ router.get("/users/me", async (req, res): Promise<void> => {
     .where(eq(usersTable.id, userId))
     .limit(1);
 
-  if (!user) {
+  if (!user || user.archivedAt) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }

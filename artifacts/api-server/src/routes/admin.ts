@@ -1,6 +1,13 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { db, assetsTable, usersTable, custodyLedgerTable } from "@workspace/db";
+import {
+  db,
+  assetsTable,
+  usersTable,
+  custodyLedgerTable,
+  matrixAccountsTable,
+  passwordResetTokensTable,
+} from "@workspace/db";
 import { eq, sql, and, isNull } from "drizzle-orm";
 import {
   AdminListAssetsQueryParams,
@@ -307,6 +314,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       email: u.email,
       role: u.role,
       createdAt: u.createdAt,
+      archivedAt: u.archivedAt,
       assetCount: userAssets.length,
       totalClaimedValue: userAssets.reduce(
         (s, a) => s + parseFloat(a.claimedValue),
@@ -316,6 +324,352 @@ router.get("/admin/users", async (req, res): Promise<void> => {
   });
 
   res.json(result);
+});
+
+// ── User & Citizen management ──────────────────────────────────────────────
+// Two kinds of removal:
+//  • Hard delete (permanent): for test/junk records. Cascades to the owner's
+//    assets, password-reset tokens, custody entries, and linked Matrix account.
+//  • Archive (soft delete): for real users. Sets archivedAt so the record drops
+//    out of every active/public view but the row (and its data) stays in the DB
+//    and can be restored. System core accounts and admin users are protected.
+
+const SYSTEM_CORES = [
+  "000000000000",
+  "111111111111",
+  "222222222222",
+  "333333333333",
+  "444444444444",
+  "555555555555",
+  "666666666666",
+  "777777777777",
+  "888888888888",
+  "999999999999",
+];
+
+// Admin view of every Matrix account, including archived ones (so they can be
+// restored). The public /matrix/accounts endpoint hides archived accounts.
+router.get("/admin/accounts", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const accounts = await db
+    .select({
+      accountNumber: matrixAccountsTable.accountNumber,
+      name: matrixAccountsTable.name,
+      type: matrixAccountsTable.type,
+      cluster: matrixAccountsTable.cluster,
+      gravityBalance: matrixAccountsTable.gravityBalance,
+      createdAt: matrixAccountsTable.createdAt,
+      archivedAt: matrixAccountsTable.archivedAt,
+    })
+    .from(matrixAccountsTable)
+    .orderBy(matrixAccountsTable.accountNumber);
+
+  res.json({ accounts });
+});
+
+// Permanently delete a Matrix account and everything tied to it.
+router.delete(
+  "/admin/accounts/:accountNumber",
+  async (req, res): Promise<void> => {
+    if (!(await requireAdmin(req, res))) return;
+
+    const accountNumber = req.params.accountNumber;
+    if (SYSTEM_CORES.includes(accountNumber)) {
+      res.status(403).json({ error: "Cannot delete a system core account" });
+      return;
+    }
+
+    const [target] = await db
+      .select()
+      .from(matrixAccountsTable)
+      .where(eq(matrixAccountsTable.accountNumber, accountNumber))
+      .limit(1);
+
+    if (!target) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+
+    const [linkedAdmin] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.accountNumber, accountNumber),
+          eq(usersTable.role, "admin"),
+        ),
+      )
+      .limit(1);
+    if (linkedAdmin) {
+      res
+        .status(403)
+        .json({ error: "Cannot delete an account linked to an admin" });
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      const linkedUsers = await tx
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.accountNumber, accountNumber));
+
+      for (const u of linkedUsers) {
+        if (u.role === "admin") continue; // never remove an admin
+        await tx
+          .delete(passwordResetTokensTable)
+          .where(eq(passwordResetTokensTable.userId, u.id));
+        await tx.delete(assetsTable).where(eq(assetsTable.userId, u.id));
+        await tx.delete(usersTable).where(eq(usersTable.id, u.id));
+      }
+
+      await tx
+        .delete(custodyLedgerTable)
+        .where(eq(custodyLedgerTable.ownerAccount, accountNumber));
+      await tx
+        .delete(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, accountNumber));
+    });
+
+    req.log.info({ accountNumber }, "Admin permanently deleted Matrix account");
+    res.json({ ok: true });
+  },
+);
+
+// Archive (soft delete) a Matrix account and any linked non-admin users.
+router.post(
+  "/admin/accounts/:accountNumber/archive",
+  async (req, res): Promise<void> => {
+    if (!(await requireAdmin(req, res))) return;
+
+    const accountNumber = req.params.accountNumber;
+    if (SYSTEM_CORES.includes(accountNumber)) {
+      res.status(403).json({ error: "Cannot archive a system core account" });
+      return;
+    }
+
+    const [target] = await db
+      .select()
+      .from(matrixAccountsTable)
+      .where(eq(matrixAccountsTable.accountNumber, accountNumber))
+      .limit(1);
+
+    if (!target) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+
+    const [linkedAdmin] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.accountNumber, accountNumber),
+          eq(usersTable.role, "admin"),
+        ),
+      )
+      .limit(1);
+    if (linkedAdmin) {
+      res
+        .status(403)
+        .json({ error: "Cannot archive an account linked to an admin" });
+      return;
+    }
+
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      await tx
+        .update(matrixAccountsTable)
+        .set({ archivedAt: now })
+        .where(eq(matrixAccountsTable.accountNumber, accountNumber));
+      await tx
+        .update(usersTable)
+        .set({ archivedAt: now })
+        .where(
+          and(
+            eq(usersTable.accountNumber, accountNumber),
+            sql`${usersTable.role} is distinct from 'admin'`,
+          ),
+        );
+    });
+
+    req.log.info({ accountNumber }, "Admin archived Matrix account");
+    res.json({ ok: true });
+  },
+);
+
+// Restore an archived Matrix account and any linked users.
+router.post(
+  "/admin/accounts/:accountNumber/restore",
+  async (req, res): Promise<void> => {
+    if (!(await requireAdmin(req, res))) return;
+
+    const accountNumber = req.params.accountNumber;
+    const [target] = await db
+      .select()
+      .from(matrixAccountsTable)
+      .where(eq(matrixAccountsTable.accountNumber, accountNumber))
+      .limit(1);
+
+    if (!target) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(matrixAccountsTable)
+        .set({ archivedAt: null })
+        .where(eq(matrixAccountsTable.accountNumber, accountNumber));
+      await tx
+        .update(usersTable)
+        .set({ archivedAt: null })
+        .where(eq(usersTable.accountNumber, accountNumber));
+    });
+
+    req.log.info({ accountNumber }, "Admin restored Matrix account");
+    res.json({ ok: true });
+  },
+);
+
+// Permanently delete a portal user and everything tied to it.
+router.delete("/admin/users/:id", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = parseInt(req.params.id);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const [target] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (target.role === "admin") {
+    res.status(403).json({ error: "Cannot delete an admin account" });
+    return;
+  }
+  if (id === req.session.userId) {
+    res.status(403).json({ error: "Cannot delete your own account" });
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(passwordResetTokensTable)
+      .where(eq(passwordResetTokensTable.userId, id));
+    await tx.delete(assetsTable).where(eq(assetsTable.userId, id));
+    if (
+      target.accountNumber &&
+      !SYSTEM_CORES.includes(target.accountNumber)
+    ) {
+      await tx
+        .delete(custodyLedgerTable)
+        .where(eq(custodyLedgerTable.ownerAccount, target.accountNumber));
+      await tx
+        .delete(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, target.accountNumber));
+    }
+    await tx.delete(usersTable).where(eq(usersTable.id, id));
+  });
+
+  req.log.info({ userId: id }, "Admin permanently deleted user");
+  res.json({ ok: true });
+});
+
+// Archive (soft delete) a portal user and any linked Matrix account.
+router.post("/admin/users/:id/archive", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = parseInt(req.params.id);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const [target] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (target.role === "admin") {
+    res.status(403).json({ error: "Cannot archive an admin account" });
+    return;
+  }
+  if (id === req.session.userId) {
+    res.status(403).json({ error: "Cannot archive your own account" });
+    return;
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(usersTable)
+      .set({ archivedAt: now })
+      .where(eq(usersTable.id, id));
+    if (
+      target.accountNumber &&
+      !SYSTEM_CORES.includes(target.accountNumber)
+    ) {
+      await tx
+        .update(matrixAccountsTable)
+        .set({ archivedAt: now })
+        .where(eq(matrixAccountsTable.accountNumber, target.accountNumber));
+    }
+  });
+
+  req.log.info({ userId: id }, "Admin archived user");
+  res.json({ ok: true });
+});
+
+// Restore an archived portal user and any linked Matrix account.
+router.post("/admin/users/:id/restore", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = parseInt(req.params.id);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const [target] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(usersTable)
+      .set({ archivedAt: null })
+      .where(eq(usersTable.id, id));
+    if (target.accountNumber) {
+      await tx
+        .update(matrixAccountsTable)
+        .set({ archivedAt: null })
+        .where(eq(matrixAccountsTable.accountNumber, target.accountNumber));
+    }
+  });
+
+  req.log.info({ userId: id }, "Admin restored user");
+  res.json({ ok: true });
 });
 
 // NOTE: The previously open `/admin/forgot-password` and `/forgot-password`

@@ -1,5 +1,5 @@
 - [Task-commit clobbers index.ts](task-commit-clobbers-index.md) — large task merges have replaced index.ts with a flat Express app, losing session/health/routes.
-- [DB schema drift on deploy](db-schema-drift.md) — task commits change the Drizzle schema but never run `push`; must run `pnpm --filter @workspace/db run push` after any schema change.
+- [DB schema drift on deploy](db-schema-drift.md) — schema changes need a DB apply, but `push` wants to DROP the runtime `session` table (logs everyone out); use raw `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for additive cols.
 - [matrix/accounts public contract](matrix-accounts-public-contract.md) — endpoint is public-by-design (Home preview) but must stay PII-stripped; never re-add phone/email or add an auth gate.
 - [Universe Control Space scope](universe-control-space-scope.md) — page = System Accounts + Universe Vault (mint/submit/split) ONLY; admin Asset Registry stays only in admin.tsx (recurring correction).
 - [drizzle-zod must import zod/v4](drizzle-zod-v4-import.md) — schema files using createInsertSchema must import z from "zod/v4"; a plain "zod" import breaks lib declaration emit and cascades fake "no exported member" errors into api-server.

@@ -14,6 +14,7 @@ export const usersTable = pgTable("users", {
   accountNumber: text("account_number"),
   biometricKey: text("biometric_key"),
   createdAt: timestamp("created_at", { withTimezone: true }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
 // Validation configuration for types
