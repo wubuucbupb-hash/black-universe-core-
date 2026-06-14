@@ -1,3 +1,4 @@
+import { useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Layout } from "@/components/layout";
 import { useLocation } from "wouter";
@@ -22,33 +23,27 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Trash2, AlertCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Dashboard() {
   const { user, isLoading: isAuthLoading } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [txForm, setTxForm] = useState({ receiverAccount: "", amount: "" });
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const { data: vaultSummary } = useQuery({
-    queryKey: ["custody-summary"],
-    queryFn: async () => {
-      const res = await fetch(`${BASE}/api/custody/summary`, { credentials: "include" });
-      if (!res.ok) return null;
-      return res.json();
-    },
-    enabled: !!user,
-    refetchInterval: 10000,
-  });
 
   const { data: matrixData } = useQuery({
     queryKey: ["matrix-accounts"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/matrix/accounts`, { credentials: "include" });
+      const res = await fetch(`${BASE}/api/matrix/accounts`, {
+        credentials: "include",
+      });
       if (!res.ok) return null;
       return res.json();
     },
@@ -56,15 +51,17 @@ export default function Dashboard() {
     refetchInterval: 8000,
   });
 
-  const SYSTEM_CORES = ["000000000000","111111111111","222222222222","333333333333","444444444444","555555555555","666666666666","777777777777","888888888888","999999999999"];
   const allAccounts: any[] = matrixData?.accounts ?? [];
-  const systemAccounts = allAccounts.filter((a: any) => SYSTEM_CORES.includes(a.accountNumber));
-  const citizens = allAccounts.filter((a: any) => !SYSTEM_CORES.includes(a.accountNumber));
-  const myAccount = allAccounts.find((a: any) => a.accountNumber === user?.accountNumber);
+  const myAccount = allAccounts.find(
+    (a: any) => a.accountNumber === user?.accountNumber,
+  );
   const myGravity = myAccount ? Number(myAccount.gravityBalance) : 0;
 
   function fmtG(n: number | string) {
-    return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Number(n).toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
 
   const { data: summary, isLoading: isSummaryLoading } = useGetMyAssetSummary({
@@ -127,6 +124,59 @@ export default function Dashboard() {
     }
   };
 
+  const handleTransfer = async (e: FormEvent) => {
+    e.preventDefault();
+    if (
+      !txForm.receiverAccount ||
+      !txForm.amount ||
+      Number(txForm.amount) <= 0
+    ) {
+      toast({
+        title: "Missing Fields",
+        description: "Recipient and amount are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (txForm.receiverAccount === user.accountNumber) {
+      toast({
+        title: "Invalid Recipient",
+        description: "You cannot send to your own wallet.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsTransferring(true);
+    try {
+      const res = await fetch(`${BASE}/api/matrix/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          receiverAccount: txForm.receiverAccount,
+          amount: Number(txForm.amount),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Transfer failed");
+      toast({
+        title: "Transfer Complete",
+        description: `Sent ${fmtG(data.received)} G (1% network fee applied).`,
+      });
+      setTxForm({ receiverAccount: "", amount: "" });
+      queryClient.invalidateQueries({ queryKey: ["matrix-accounts"] });
+    } catch (err) {
+      toast({
+        title: "Transfer Failed",
+        description:
+          err instanceof Error ? err.message : "Something went wrong.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
@@ -172,7 +222,10 @@ export default function Dashboard() {
               {isSummaryLoading ? (
                 <Skeleton className="h-10 w-32" />
               ) : (
-                <div className="text-4xl font-serif font-semibold text-primary" data-testid="text-total-asset-value">
+                <div
+                  className="text-4xl font-serif font-semibold text-primary"
+                  data-testid="text-total-asset-value"
+                >
                   {formatCurrency(summary?.totalClaimedValue || 0)}
                 </div>
               )}
@@ -188,11 +241,16 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-serif font-semibold text-cyan-600" data-testid="text-gravity-balance">
+              <div
+                className="text-4xl font-serif font-semibold text-cyan-600"
+                data-testid="text-gravity-balance"
+              >
                 {fmtG(myGravity)} <span className="text-2xl">G</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1 font-mono">
-                {user.accountNumber ? `Wallet ${user.accountNumber}` : "No wallet linked"}
+                {user.accountNumber
+                  ? `Wallet ${user.accountNumber}`
+                  : "No wallet linked"}
               </p>
             </CardContent>
           </Card>
@@ -233,122 +291,73 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* ── BLACK UNIVERSE MATRIX ENGINE WIDGET ── */}
-        <div className="bg-[#0a0a0a] border border-zinc-800 rounded-xl mb-8 overflow-hidden">
-          {/* Widget Header */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 bg-black">
-            <div className="flex items-center gap-2">
-              <span className="text-cyan-400 text-base">🌌</span>
-              <span className="text-cyan-400 font-bold font-mono text-sm tracking-widest">BLACK UNIVERSE MATRIX ENGINE</span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setLocation("/matrix")}
-                className="px-3 py-1 text-[11px] font-bold font-mono bg-cyan-500 hover:bg-cyan-400 text-black rounded transition-all"
-              >
-                OPEN MATRIX →
-              </button>
-              <button
-                onClick={() => setLocation("/vault")}
-                className="px-3 py-1 text-[11px] font-bold font-mono bg-yellow-500 hover:bg-yellow-400 text-black rounded transition-all"
-              >
-                🏛️ VAULT
-              </button>
-            </div>
-          </div>
-
-          {/* Live Stats Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-zinc-800 border-b border-zinc-800">
-            {[
-              { label: "SYSTEM POOLS", value: systemAccounts.length, color: "text-cyan-400" },
-              { label: "CITIZENS", value: citizens.length, color: "text-white" },
-              { label: "VAULT LOCKED", value: vaultSummary?.locked ?? 0, color: "text-yellow-400" },
-              { label: "VAULT RELEASED", value: vaultSummary?.released ?? 0, color: "text-emerald-400" },
-            ].map((s) => (
-              <div key={s.label} className="p-3 text-center">
-                <div className="text-zinc-600 text-[9px] font-mono tracking-widest">{s.label}</div>
-                <div className={`text-xl font-bold font-mono ${s.color} mt-0.5`}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Pool Balances Grid */}
-          <div className="p-4">
-            <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-3">🔒 GENESIS SYSTEM POOLS — LIVE BALANCES</div>
-            {systemAccounts.length === 0 ? (
-              <div className="text-zinc-700 text-xs font-mono text-center py-4">Loading pool data...</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {systemAccounts.map((acc: any) => {
-                  const isFounder = acc.accountNumber === "111111111111";
-                  const isSystem = acc.accountNumber === "000000000000";
-                  return (
-                    <div
-                      key={acc.accountNumber}
-                      className={`rounded-lg px-3 py-2 border ${isFounder ? "border-emerald-500/40 bg-emerald-500/5" : isSystem ? "border-red-500/30 bg-red-500/5" : "border-zinc-800 bg-zinc-900/50"}`}
-                    >
-                      <div className={`text-[9px] font-mono font-bold tracking-widest ${isFounder ? "text-emerald-400" : isSystem ? "text-red-400" : "text-cyan-500"}`}>
-                        {acc.type.toUpperCase()}
-                      </div>
-                      <div className="text-white text-xs font-semibold truncate leading-tight mt-0.5">{acc.name.replace("Black Universe — ", "")}</div>
-                      <div className="text-zinc-500 text-[10px] font-mono">{acc.accountNumber}</div>
-                      <div className={`text-sm font-bold font-mono mt-1 ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                        {fmtG(acc.gravityBalance)} G
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Citizens Row */}
-            {citizens.length > 0 && (
-              <div className="mt-4">
-                <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-2">👥 REGISTERED CITIZENS ({citizens.length})</div>
-                <div className="flex flex-wrap gap-2">
-                  {citizens.map((c: any) => (
-                    <div key={c.accountNumber} className="border border-cyan-500/20 rounded-md px-3 py-1.5 bg-cyan-500/5">
-                      <div className="text-white text-xs font-semibold">{c.name}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-zinc-500 text-[10px] font-mono">{c.accountNumber}</span>
-                        <span className={`text-[11px] font-bold font-mono ${Number(c.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                          {fmtG(c.gravityBalance)} G
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Vault Status Banner */}
-            <div
-              onClick={() => setLocation("/vault")}
-              className="cursor-pointer flex items-center justify-between mt-4 p-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 hover:bg-yellow-500/10 transition-all"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🏛️</span>
-                <div>
-                  <div className="text-yellow-400 font-bold text-xs font-mono tracking-wide">CUSTODY VAULT STATUS</div>
-                  <div className="text-zinc-500 text-[10px] font-mono mt-0.5">
-                    {vaultSummary
-                      ? `${vaultSummary.locked} Locked · ${vaultSummary.released} Released · ${vaultSummary.total} Total Entries`
-                      : "Loading..."}
+        {/* ── SEND GRAVITY (P2P TRANSFER) ── */}
+        <Card className="mb-10">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-serif font-bold text-primary">
+              Send Gravity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {user.accountNumber ? (
+              <>
+                <form
+                  onSubmit={handleTransfer}
+                  className="flex flex-col sm:flex-row gap-3 sm:items-end"
+                >
+                  <div className="flex-1">
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Recipient Account Number
+                    </label>
+                    <Input
+                      value={txForm.receiverAccount}
+                      onChange={(e) =>
+                        setTxForm({
+                          ...txForm,
+                          receiverAccount: e.target.value,
+                        })
+                      }
+                      placeholder="e.g. 100000000001"
+                      data-testid="input-transfer-recipient"
+                    />
                   </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {vaultSummary?.locked > 0 && (
-                  <span className="text-yellow-400 font-bold text-xs font-mono border border-yellow-500/40 px-2 py-0.5 rounded">
-                    🔒 {vaultSummary.locked} LOCKED
-                  </span>
-                )}
-                <span className="text-zinc-600 text-[10px] font-mono">Open →</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* ── END MATRIX ENGINE WIDGET ── */}
+                  <div className="w-full sm:w-44">
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Amount (G)
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={txForm.amount}
+                      onChange={(e) =>
+                        setTxForm({ ...txForm, amount: e.target.value })
+                      }
+                      placeholder="0.00"
+                      data-testid="input-transfer-amount"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isTransferring}
+                    data-testid="button-send-gravity"
+                  >
+                    {isTransferring ? "Sending..." : "Send"}
+                  </Button>
+                </form>
+                <p className="text-xs text-muted-foreground mt-3 font-mono">
+                  Available: {fmtG(myGravity)} G · A 1% network fee applies to
+                  each transfer.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No wallet is linked to your account yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        {/* ── END SEND GRAVITY ── */}
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -390,7 +399,7 @@ export default function Dashboard() {
                 </TableHeader>
                 <TableBody>
                   {Array.isArray(assets) &&
-                    assets.map((asset) => ( 
+                    assets.map((asset) => (
                       <TableRow key={asset.id}>
                         <TableCell className="font-medium">
                           {formatAssetType(asset.assetType)}
@@ -417,7 +426,10 @@ export default function Dashboard() {
                             {getStatusBadge(asset.status)}
                             {asset.mintedAt && (
                               <Badge className="bg-cyan-600 hover:bg-cyan-700 w-fit">
-                                Minted{asset.gravityIssued != null ? ` · ${fmtG(asset.gravityIssued)} G` : ""}
+                                Minted
+                                {asset.gravityIssued != null
+                                  ? ` · ${fmtG(asset.gravityIssued)} G`
+                                  : ""}
                               </Badge>
                             )}
                           </div>

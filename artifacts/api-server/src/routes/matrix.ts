@@ -31,6 +31,26 @@ async function requireAdmin(req: Request, res: Response): Promise<boolean> {
   return true;
 }
 
+// Returns the logged-in user, or null after sending a 401. Lets any
+// authenticated citizen call an endpoint (not just admins).
+async function getAuthUser(req: Request, res: Response) {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  return user;
+}
+
 // ── GET /api/matrix/accounts ───────────────────────────────────────────────
 // Public pool/citizen view. Returns only non-sensitive fields — contact PII
 // (phone, email, nationalIdHash) is never exposed here.
@@ -91,10 +111,21 @@ router.post("/matrix/mint", async (req, res): Promise<void> => {
 // ── POST /api/matrix/transfer ──────────────────────────────────────────────
 // P2P transfer — 1% tax to Founder, 99% to receiver
 router.post("/matrix/transfer", async (req, res): Promise<void> => {
-  if (!(await requireAdmin(req, res))) return;
+  const user = await getAuthUser(req, res);
+  if (!user) return;
 
   try {
-    const { senderAccount, receiverAccount, amount } = req.body;
+    const { receiverAccount, amount } = req.body;
+    // Non-admin citizens may only send from their own linked wallet; any
+    // body-supplied senderAccount is ignored for them. Admins may pass one.
+    let senderAccount: string | undefined = req.body.senderAccount;
+    if (user.role !== "admin") {
+      if (!user.accountNumber) {
+        res.status(403).json({ error: "No wallet linked to your account" });
+        return;
+      }
+      senderAccount = user.accountNumber;
+    }
 
     if (!senderAccount || !receiverAccount || !amount || Number(amount) <= 0) {
       res.status(400).json({ error: "Sender, receiver and amount are required" });
