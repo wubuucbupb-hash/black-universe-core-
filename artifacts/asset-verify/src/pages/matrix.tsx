@@ -340,6 +340,19 @@ export default function MatrixEngine() {
                         </option>
                       ))}
                   </select>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="…or type account number manually"
+                    value={txForm.receiverAccount}
+                    onChange={(e) =>
+                      setTxForm((f) => ({
+                        ...f,
+                        receiverAccount: e.target.value.trim(),
+                      }))
+                    }
+                    className="w-full mt-2 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm font-mono focus:border-cyan-500 focus:outline-none"
+                  />
                 </div>
 
                 {/* Amount in local currency — Gravity auto-calculates from this */}
