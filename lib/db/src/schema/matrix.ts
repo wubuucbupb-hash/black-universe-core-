@@ -34,6 +34,7 @@ export const matrixTransactionsTable = pgTable("matrix_transactions", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  reversedAt: timestamp("reversed_at", { withTimezone: true }),
 });
 
 export const clusterCountersTable = pgTable("cluster_counters", {

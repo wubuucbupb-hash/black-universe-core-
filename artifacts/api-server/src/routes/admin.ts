@@ -6,6 +6,7 @@ import {
   usersTable,
   custodyLedgerTable,
   matrixAccountsTable,
+  matrixTransactionsTable,
   passwordResetTokensTable,
 } from "@workspace/db";
 import { eq, sql, and, isNull } from "drizzle-orm";
@@ -13,7 +14,12 @@ import {
   AdminListAssetsQueryParams,
   RejectAssetBody,
 } from "@workspace/api-zod";
-import { mintGravity, ensureUserMatrixAccount } from "../lib/matrixEngine";
+import {
+  mintGravity,
+  ensureUserMatrixAccount,
+  adjustBalance,
+  logTx,
+} from "../lib/matrixEngine";
 import { encrypt } from "../lib/encryption";
 
 const router = Router();
@@ -707,6 +713,82 @@ router.post("/admin/users/:id/restore", async (req, res): Promise<void> => {
   req.log.info({ userId: id }, "Admin restored user");
   res.json({ ok: true });
 });
+
+// ── POST /admin/transactions/:id/reverse ───────────────────────────────────
+// Admin-only. Reverses a recorded Matrix transaction by moving the gravity back
+// exactly as the row recorded it: credit the original payer (fromAccount), debit
+// the original payee (toAccount). The original row is marked `reversedAt` so it
+// can't be reversed twice, and a REVERSAL row is appended for the audit trail.
+//
+// This faithfully inverts the recorded from/to/amount of THAT row. Composite
+// system events (e.g. a MINT, which credits several pools) only log part of the
+// movement per row, so reversing one row undoes only what that row recorded —
+// the admin reverses each related row separately.
+router.post(
+  "/admin/transactions/:id/reverse",
+  async (req, res): Promise<void> => {
+    if (!(await requireAdmin(req, res))) return;
+
+    const id = parseInt(req.params.id);
+    if (Number.isNaN(id)) {
+      res.status(400).json({ error: "Invalid transaction id" });
+      return;
+    }
+
+    const [tx] = await db
+      .select()
+      .from(matrixTransactionsTable)
+      .where(eq(matrixTransactionsTable.id, id))
+      .limit(1);
+
+    if (!tx) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+    if (tx.reversedAt) {
+      res.status(400).json({ error: "Transaction already reversed" });
+      return;
+    }
+    if (tx.txType === "REVERSAL") {
+      res.status(400).json({ error: "A reversal cannot itself be reversed" });
+      return;
+    }
+
+    const amount = Number(tx.amount);
+    if (!tx.amount || !Number.isFinite(amount) || amount <= 0) {
+      res
+        .status(400)
+        .json({ error: "This transaction has no gravity movement to reverse" });
+      return;
+    }
+
+    await db.transaction(async (dbtx) => {
+      // Inverse of the recorded row. Accounts that no longer exist simply match
+      // no rows (safe no-op).
+      if (tx.fromAccount) {
+        await adjustBalance(tx.fromAccount, amount.toFixed(6), dbtx);
+      }
+      if (tx.toAccount) {
+        await adjustBalance(tx.toAccount, (-amount).toFixed(6), dbtx);
+      }
+      await dbtx
+        .update(matrixTransactionsTable)
+        .set({ reversedAt: new Date() })
+        .where(eq(matrixTransactionsTable.id, id));
+      await logTx(
+        "REVERSAL",
+        `↩️ [REVERSAL] Tx #${tx.id} (${tx.txType}) reversed by admin — ${amount.toFixed(2)} Gravity returned`,
+        tx.toAccount ?? undefined,
+        tx.fromAccount ?? undefined,
+        amount.toFixed(6),
+        dbtx,
+      );
+    });
+
+    req.log.info({ txId: id }, "Admin reversed transaction");
+    res.json({ ok: true });
+  },
+);
 
 // NOTE: The previously open `/admin/forgot-password` and `/forgot-password`
 // routes were removed. They allowed anyone to reset any account's password by

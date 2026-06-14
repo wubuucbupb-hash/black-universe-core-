@@ -66,6 +66,10 @@ export default function Admin() {
     id: string;
     label: string;
   } | null>(null);
+  const [confirmReverse, setConfirmReverse] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
 
   useEffect(() => {
     const onHash = () => setActiveTab(tabFromHash());
@@ -244,6 +248,7 @@ export default function Admin() {
 
   const invalidateManagement = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-matrix-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-matrix-txns"] });
     queryClient.invalidateQueries({ queryKey: getAdminListUsersQueryKey() });
     queryClient.invalidateQueries({ queryKey: getAdminListAssetsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
@@ -347,6 +352,18 @@ export default function Admin() {
       );
     }
     setConfirmDelete(null);
+  };
+
+  const handleConfirmReverse = async () => {
+    if (!confirmReverse) return;
+    await runAdminAction(
+      `tx:${confirmReverse.id}`,
+      `/api/admin/transactions/${confirmReverse.id}/reverse`,
+      "POST",
+      "Transaction Reversed",
+      "Gravity returned and the transaction marked reversed.",
+    );
+    setConfirmReverse(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -968,6 +985,7 @@ export default function Admin() {
                       <th className="text-right px-4 py-2">AMOUNT (G)</th>
                       <th className="text-left px-4 py-2">NOTE</th>
                       <th className="text-left px-4 py-2">DATE</th>
+                      <th className="text-left px-4 py-2">ACTION</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -984,6 +1002,21 @@ export default function Admin() {
                         <td className="px-4 py-2 text-right text-green-400 font-bold">{fmtG(t.amount)}</td>
                         <td className="px-4 py-2 text-zinc-500 max-w-[160px] truncate">{t.note ?? "—"}</td>
                         <td className="px-4 py-2 text-zinc-600">{t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-IN") : "—"}</td>
+                        <td className="px-4 py-2">
+                          {t.reversedAt ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">REVERSED</span>
+                          ) : t.txType === "REVERSAL" || !t.amount || Number(t.amount) <= 0 ? (
+                            <span className="text-zinc-700">—</span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmReverse({ id: t.id, label: `Tx #${t.id} (${t.txType}) — ${fmtG(t.amount)} G` })}
+                              disabled={busyKey === `tx:${t.id}`}
+                              className="px-2 py-1 rounded bg-amber-600/80 hover:bg-amber-600 text-white text-[10px] font-bold disabled:opacity-50"
+                            >
+                              {busyKey === `tx:${t.id}` ? "..." : "Reverse"}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1034,6 +1067,38 @@ export default function Admin() {
                 data-testid="button-confirm-delete"
               >
                 <Trash2 className="h-4 w-4 mr-1" /> Delete permanently
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={!!confirmReverse}
+          onOpenChange={(open) => !open && setConfirmReverse(null)}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reverse this transaction?</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 text-sm text-zinc-400">
+              <span className="text-white font-bold">
+                {confirmReverse?.label}
+              </span>{" "}
+              will be reversed: the gravity moves back (payer credited, payee
+              debited) and the transaction is marked{" "}
+              <span className="text-amber-400 font-bold">REVERSED</span>. A
+              reversal entry is added to the log for the audit trail.
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmReverse(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmReverse}
+                disabled={busyKey !== null}
+                className="bg-amber-600 hover:bg-amber-600/90 text-white"
+              >
+                Reverse transaction
               </Button>
             </DialogFooter>
           </DialogContent>
