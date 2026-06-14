@@ -86,6 +86,7 @@ function fmtG(n: number | string) {
 function Home() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -148,23 +149,27 @@ function Home() {
               </div>
             </div>
 
-            {/* Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-zinc-800 border-b border-zinc-800">
-              {[
-                { label: "SYSTEM POOLS", value: systemAccounts.length, color: "text-cyan-400" },
-                { label: "CITIZENS", value: citizens.length, color: "text-white" },
-                { label: "VAULT LOCKED", value: vaultSummary?.locked ?? "–", color: "text-yellow-400" },
-                { label: "VAULT RELEASED", value: vaultSummary?.released ?? "–", color: "text-emerald-400" },
-              ].map((s) => (
-                <div key={s.label} className="p-3 text-center">
-                  <div className="text-zinc-600 text-[9px] font-mono tracking-widest">{s.label}</div>
-                  <div className={`text-xl font-bold font-mono ${s.color} mt-0.5`}>{s.value}</div>
-                </div>
-              ))}
-            </div>
+            {/* Stats Row — system-wide counts, admin only */}
+            {isAdmin && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-zinc-800 border-b border-zinc-800">
+                {[
+                  { label: "SYSTEM POOLS", value: systemAccounts.length, color: "text-cyan-400" },
+                  { label: "CITIZENS", value: citizens.length, color: "text-white" },
+                  { label: "VAULT LOCKED", value: vaultSummary?.locked ?? "–", color: "text-yellow-400" },
+                  { label: "VAULT RELEASED", value: vaultSummary?.released ?? "–", color: "text-emerald-400" },
+                ].map((s) => (
+                  <div key={s.label} className="p-3 text-center">
+                    <div className="text-zinc-600 text-[9px] font-mono tracking-widest">{s.label}</div>
+                    <div className={`text-xl font-bold font-mono ${s.color} mt-0.5`}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {/* Pool Balances */}
+            {/* Pool Balances — genesis pools + citizen list, admin only */}
             <div className="p-4">
+              {isAdmin && (
+                <>
               <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-3">🔒 GENESIS SYSTEM POOLS — LIVE BALANCES</div>
               {systemAccounts.length === 0 ? (
                 <div className="text-zinc-700 text-xs font-mono text-center py-4 animate-pulse">Loading pool data...</div>
@@ -211,6 +216,8 @@ function Home() {
                   </div>
                 </div>
               )}
+                </>
+              )}
 
               {/* Vault Banner */}
               {user && (
@@ -235,21 +242,23 @@ function Home() {
             </div>
           </div>
 
-          {/* Universe Control Space — Minting */}
-          <button
-            onClick={() => setLocation("/universe-control-space")}
-            className="w-full flex items-center justify-between p-4 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:to-emerald-500/20 transition-all"
-            data-testid="button-ucs-home"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🪙</span>
-              <div className="text-left">
-                <div className="text-cyan-300 font-bold text-sm font-mono tracking-widest">UNIVERSE CONTROL SPACE</div>
-                <div className="text-zinc-500 text-[10px] font-mono mt-0.5">Minting · Approve verified assets & issue Gravity</div>
+          {/* Universe Control Space — Minting (admin only) */}
+          {isAdmin && (
+            <button
+              onClick={() => setLocation("/universe-control-space")}
+              className="w-full flex items-center justify-between p-4 rounded-xl border border-cyan-500/40 bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 hover:from-cyan-500/20 hover:to-emerald-500/20 transition-all"
+              data-testid="button-ucs-home"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🪙</span>
+                <div className="text-left">
+                  <div className="text-cyan-300 font-bold text-sm font-mono tracking-widest">UNIVERSE CONTROL SPACE</div>
+                  <div className="text-zinc-500 text-[10px] font-mono mt-0.5">Minting · Approve verified assets & issue Gravity</div>
+                </div>
               </div>
-            </div>
-            <span className="text-cyan-400 text-xs font-mono">Open →</span>
-          </button>
+              <span className="text-cyan-400 text-xs font-mono">Open →</span>
+            </button>
+          )}
 
           {/* Quick Actions */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -257,7 +266,9 @@ function Home() {
               { label: "📊 Dashboard", sub: "Portfolio & Assets", path: "/dashboard", style: "border-zinc-700 hover:border-zinc-500" },
               { label: "🔥 Matrix Engine", sub: "Mint · P2P Transfer", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
               { label: "🏛️ Custody Vault", sub: "Lock · Escrow · Release", path: "/vault", style: "border-yellow-500/40 hover:border-yellow-500" },
-              { label: "🛠️ Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" },
+              ...(isAdmin
+                ? [{ label: "🛠️ Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" }]
+                : []),
             ].map((btn) => (
               <button
                 key={btn.path}
