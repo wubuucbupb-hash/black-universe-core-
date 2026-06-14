@@ -138,7 +138,11 @@ export default function MatrixEngine() {
     onSuccess: (data) => {
       toast({
         title: "✅ Transfer Successful!",
-        description: `Received: ${fmt(data.received)} Gravity (1% tax: ${fmt(data.tax)})`,
+        description:
+          `Receiver got full ${fmt(data.received)} Gravity · 1% charge ${fmt(data.charge)} deducted separately` +
+          (data.overage > 0
+            ? ` · ⚠️ Wallet overage: -${fmt(data.overage)}`
+            : ""),
       });
       setTxForm({ senderAccount: "", receiverAccount: "", amount: "" });
       setInrAmount("");
@@ -400,8 +404,9 @@ export default function MatrixEngine() {
                     1 Gravity = ₹{fmt(GRAVITY_RATE)}
                     {Number(txForm.amount) > 0 && (
                       <>
-                        {" · "}Receiver gets {fmt(Number(txForm.amount) * 0.99)} |
-                        Tax: {fmt(Number(txForm.amount) * 0.01)} → Founder
+                        {" · "}Receiver gets full {fmt(Number(txForm.amount))} · 1%
+                        charge {fmt(Number(txForm.amount) * 0.01)} extra from your
+                        wallet (total {fmt(Number(txForm.amount) * 1.01)})
                       </>
                     )}
                   </p>

@@ -180,17 +180,44 @@ router.post("/matrix/transfer", async (req, res): Promise<void> => {
       return;
     }
 
-    const tax = txAmount * 0.01;
-    const netTransfer = txAmount - tax;
+    // The 1% transaction charge is deducted SEPARATELY from the sender — the
+    // receiver always gets the FULL amount (charge is not netted out of it).
+    // The sender must hold at least the transfer amount; the separate charge
+    // may push their wallet into overage (negative balance), which is recorded
+    // on the transaction.
+    const charge = txAmount * 0.01;
 
     await adjustBalance(senderAccount, (-txAmount).toFixed(6));
-    await adjustBalance(receiverAccount, netTransfer.toFixed(6));
-    await adjustBalance(FOUNDER_ACCOUNT, tax.toFixed(6));
+    await adjustBalance(receiverAccount, txAmount.toFixed(6));
+    await adjustBalance(senderAccount, (-charge).toFixed(6));
+    await adjustBalance(FOUNDER_ACCOUNT, charge.toFixed(6));
 
-    await logTx("P2P_TRANSFER", `💸 [P2P TX] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity`, senderAccount, receiverAccount, txAmount.toFixed(6));
-    await logTx("P2P_TRANSFER", `🔥 [TAX] 1% (${tax.toFixed(2)} Gravity) → Founder Account`, senderAccount, FOUNDER_ACCOUNT, tax.toFixed(6));
+    const newSenderBalance = senderBalance - txAmount - charge;
+    const overage = newSenderBalance < 0 ? -newSenderBalance : 0;
 
-    res.json({ success: true, sent: txAmount, received: netTransfer, tax });
+    await logTx(
+      "P2P_TRANSFER",
+      `💸 [P2P TX] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (full; charge separate)`,
+      senderAccount,
+      receiverAccount,
+      txAmount.toFixed(6),
+    );
+    await logTx(
+      "TX_CHARGE",
+      `🔥 [CHARGE] 1% (${charge.toFixed(2)} Gravity) → Founder, deducted from ${sender.name}${overage > 0 ? ` ⚠️ ACCOUNT OVERAGE: -${overage.toFixed(2)} Gravity` : ""}`,
+      senderAccount,
+      FOUNDER_ACCOUNT,
+      charge.toFixed(6),
+    );
+
+    res.json({
+      success: true,
+      sent: txAmount,
+      received: txAmount,
+      charge,
+      newSenderBalance,
+      overage,
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Transfer failed";
     res.status(500).json({ error: msg });
