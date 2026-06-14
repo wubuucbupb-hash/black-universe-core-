@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { timingSafeEqual, randomBytes, createHash } from "crypto";
 import { db, usersTable, passwordResetTokensTable } from "@workspace/db";
-import { eq, or, and, gt, isNull, desc } from "drizzle-orm";
+import { eq, or, and, gt, isNull, desc, sql } from "drizzle-orm";
 import { provisionCitizenAccount, VALID_CLUSTERS } from "../lib/matrixEngine";
 import { issueAuthToken } from "../lib/authToken";
 import { sendPasswordResetCode } from "../lib/notify";
@@ -58,10 +58,15 @@ router.post("/users/register", async (req, res): Promise<void> => {
       return;
     }
 
+    // Email is unique case-insensitively: "A@x.com" and "a@x.com" are the same.
+    // Phone is intentionally NOT unique — one person may hold multiple accounts
+    // sharing a phone number, each with a different email.
+    const normalizedEmail = String(email).trim().toLowerCase();
+
     const existing = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.email, email))
+      .where(sql`lower(${usersTable.email}) = ${normalizedEmail}`)
       .limit(1);
 
     if (existing.length > 0) {
@@ -72,14 +77,14 @@ router.post("/users/register", async (req, res): Promise<void> => {
     const passwordHash = await bcrypt.hash(password, 10);
     const [user] = await db
       .insert(usersTable)
-      .values({ name, email, phoneNumber: phoneNumber ?? null, passwordHash, role: "citizen" })
+      .values({ name, email: normalizedEmail, phoneNumber: phoneNumber ?? null, passwordHash, role: "citizen" })
       .returning();
 
     // Auto-provision a linked Matrix account so gravity can later be issued.
     const accountNumber = await provisionCitizenAccount({
-      name: name || email,
+      name: name || normalizedEmail,
       phone: phoneNumber,
-      email,
+      email: normalizedEmail,
       cluster: cluster != null ? String(cluster) : undefined,
     });
     const [linkedUser] = await db
@@ -148,7 +153,10 @@ router.post("/users/login", async (req, res): Promise<void> => {
     .select()
     .from(usersTable)
     .where(
-      or(eq(usersTable.email, email), eq(usersTable.phoneNumber, email)),
+      or(
+        sql`lower(${usersTable.email}) = ${String(email).trim().toLowerCase()}`,
+        eq(usersTable.phoneNumber, email),
+      ),
     )
     .limit(1);
 
@@ -223,7 +231,10 @@ router.post("/users/forgot-password", async (req, res): Promise<void> => {
       .select()
       .from(usersTable)
       .where(
-        or(eq(usersTable.email, email), eq(usersTable.phoneNumber, email)),
+        or(
+          sql`lower(${usersTable.email}) = ${String(email).trim().toLowerCase()}`,
+          eq(usersTable.phoneNumber, email),
+        ),
       )
       .limit(1);
 
