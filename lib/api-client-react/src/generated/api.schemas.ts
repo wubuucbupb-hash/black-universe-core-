@@ -66,6 +66,26 @@ export interface User {
 
 export interface AuthResponse {
   user: User;
+  /**
+     * Bearer token for non-browser clients (e.g. the mobile app). Web clients rely on the session cookie and can ignore this field. Send it as `Authorization: Bearer <token>` on subsequent requests.
+     * @nullable
+     */
+  token?: string | null;
+}
+
+export interface MatrixAccount {
+  accountNumber: string;
+  name: string;
+  type: string;
+  /** @nullable */
+  cluster?: string | null;
+  /** Gravity balance as a fixed-precision decimal string. */
+  gravityBalance: string;
+  createdAt: string;
+}
+
+export interface MatrixAccountsResponse {
+  accounts: MatrixAccount[];
 }
 
 export type AssetInputAssetType = typeof AssetInputAssetType[keyof typeof AssetInputAssetType];

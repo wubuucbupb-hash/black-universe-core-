@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "NHnzmbHFJFZDbBVcI5jYB"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "black universe icon"

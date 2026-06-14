@@ -19,6 +19,8 @@ export * from './assetWithUserStatus';
 export * from './authResponse';
 export * from './errorResponse';
 export * from './healthStatus';
+export * from './matrixAccount';
+export * from './matrixAccountsResponse';
 export * from './rejectionNote';
 export * from './successResponse';
 export * from './uploadUrlRequest';

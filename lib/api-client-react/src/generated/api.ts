@@ -29,6 +29,7 @@ import type {
   AuthResponse,
   ErrorResponse,
   HealthStatus,
+  MatrixAccountsResponse,
   RejectionNote,
   SuccessResponse,
   UploadUrlRequest,
@@ -777,6 +778,83 @@ export function useGetMyAssetSummary<TData = Awaited<ReturnType<typeof getMyAsse
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMyAssetSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMatrixAccountsUrl = () => {
+
+
+
+
+  return `/api/matrix/accounts`
+}
+
+/**
+ * @summary List Matrix accounts (system pools + citizen wallets) with gravity balances
+ */
+export const getMatrixAccounts = async ( options?: RequestInit): Promise<MatrixAccountsResponse> => {
+
+  return customFetch<MatrixAccountsResponse>(getGetMatrixAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMatrixAccountsQueryKey = () => {
+    return [
+    `/api/matrix/accounts`
+    ] as const;
+    }
+
+
+export const getGetMatrixAccountsQueryOptions = <TData = Awaited<ReturnType<typeof getMatrixAccounts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMatrixAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMatrixAccountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMatrixAccounts>>> = ({ signal }) => getMatrixAccounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMatrixAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMatrixAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof getMatrixAccounts>>>
+export type GetMatrixAccountsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Matrix accounts (system pools + citizen wallets) with gravity balances
+ */
+
+export function useGetMatrixAccounts<TData = Awaited<ReturnType<typeof getMatrixAccounts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMatrixAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMatrixAccountsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

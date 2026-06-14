@@ -51,7 +51,8 @@ export const LoginUserResponse = zod.object({
   "phoneNumber": zod.string().nullish(),
   "accountNumber": zod.string().nullish(),
   "createdAt": zod.coerce.date()
-})
+}),
+  "token": zod.string().nullish().describe('Bearer token for non-browser clients (e.g. the mobile app). Web clients rely on the session cookie and can ignore this field. Send it as `Authorization: Bearer <token>` on subsequent requests.')
 })
 
 
@@ -163,6 +164,21 @@ export const GetMyAssetSummaryResponse = zod.object({
   "totalRejected": zod.number(),
   "totalClaimedValue": zod.number(),
   "totalApprovedValue": zod.number()
+})
+
+
+/**
+ * @summary List Matrix accounts (system pools + citizen wallets) with gravity balances
+ */
+export const GetMatrixAccountsResponse = zod.object({
+  "accounts": zod.array(zod.object({
+  "accountNumber": zod.string(),
+  "name": zod.string(),
+  "type": zod.string(),
+  "cluster": zod.string().nullish(),
+  "gravityBalance": zod.string().describe('Gravity balance as a fixed-precision decimal string.'),
+  "createdAt": zod.coerce.date()
+}))
 })
 
 

@@ -16,6 +16,8 @@ tags:
     description: Asset operations
   - name: admin
     description: Admin operations
+  - name: matrix
+    description: Matrix economy operations
   - name: Storage
     description: Object storage upload and serving endpoints.
 paths:
@@ -218,6 +220,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AssetSummary"
+
+  /matrix/accounts:
+    get:
+      operationId: getMatrixAccounts
+      tags: [matrix]
+      summary: List Matrix accounts (system pools + citizen wallets) with gravity balances
+      responses:
+        "200":
+          description: Matrix accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatrixAccountsResponse"
 
   /admin/assets:
     get:
@@ -483,6 +498,40 @@ components:
       properties:
         user:
           $ref: "#/components/schemas/User"
+        token:
+          type: ["string", "null"]
+          description: >-
+            Bearer token for non-browser clients (e.g. the mobile app). Web
+            clients rely on the session cookie and can ignore this field. Send
+            it as `Authorization: Bearer <token>` on subsequent requests.
+
+    MatrixAccount:
+      type: object
+      required: [accountNumber, name, type, gravityBalance, createdAt]
+      properties:
+        accountNumber:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        cluster:
+          type: ["string", "null"]
+        gravityBalance:
+          type: string
+          description: Gravity balance as a fixed-precision decimal string.
+        createdAt:
+          type: string
+          format: date-time
+
+    MatrixAccountsResponse:
+      type: object
+      required: [accounts]
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatrixAccount"
 
     AssetInput:
       type: object

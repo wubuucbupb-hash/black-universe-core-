@@ -4,6 +4,7 @@ import { timingSafeEqual, randomBytes, createHash } from "crypto";
 import { db, usersTable, passwordResetTokensTable } from "@workspace/db";
 import { eq, or, and, gt, isNull, desc } from "drizzle-orm";
 import { provisionCitizenAccount, VALID_CLUSTERS } from "../lib/matrixEngine";
+import { issueAuthToken } from "../lib/authToken";
 
 // Password-reset tokens live for 30 minutes and are single-use.
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -87,7 +88,7 @@ router.post("/users/register", async (req, res): Promise<void> => {
       .returning();
 
     req.session.userId = user.id;
-    res.status(201).json({ user: userResponse(linkedUser) });
+    res.status(201).json({ user: userResponse(linkedUser), token: issueAuthToken(user.id) });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Registration failed";
     res.status(500).json({ error: msg });
@@ -137,7 +138,7 @@ router.post("/users/login", async (req, res): Promise<void> => {
     }
 
     req.session.userId = adminUser.id;
-    res.json({ user: userResponse(adminUser) });
+    res.json({ user: userResponse(adminUser), token: issueAuthToken(adminUser.id) });
     return;
   }
   // ── End admin fast-path ────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ router.post("/users/login", async (req, res): Promise<void> => {
   }
 
   req.session.userId = user.id;
-  res.json({ user: userResponse(user) });
+  res.json({ user: userResponse(user), token: issueAuthToken(user.id) });
 });
 
 // ── Current user ──────────────────────────────────────────────────────────────

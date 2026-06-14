@@ -6,6 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import { pool } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { verifyAuthToken } from "./lib/authToken";
 
 const app: Express = express();
 
@@ -61,6 +62,25 @@ app.use(
     },
   }),
 );
+
+// Bearer-token bridge for non-browser clients (the mobile app). When a request
+// carries a valid `Authorization: Bearer <token>` and no session is already
+// established, resolve the token to its userId and populate the session for the
+// duration of the request. Route handlers continue to read req.session.userId,
+// so no per-route changes are needed and all existing ownership/ACL checks
+// still apply.
+app.use((req, _res, next) => {
+  if (!req.session.userId) {
+    const header = req.headers.authorization;
+    if (header?.startsWith("Bearer ")) {
+      const userId = verifyAuthToken(header.slice("Bearer ".length).trim());
+      if (userId) {
+        req.session.userId = userId;
+      }
+    }
+  }
+  next();
+});
 
 app.use("/api", router);
 
