@@ -852,7 +852,7 @@ router.post(
           .select()
           .from(gravityPurchaseRequestsTable)
           .where(eq(gravityPurchaseRequestsTable.id, id))
-          .limit(1);
+          .for("update");
         if (!request) throw new Error("NOT_FOUND");
         if (request.status !== "pending") throw new Error("ALREADY_PROCESSED");
 
@@ -870,7 +870,7 @@ router.post(
           .select()
           .from(matrixAccountsTable)
           .where(eq(matrixAccountsTable.accountNumber, RESERVE_ACCOUNT))
-          .limit(1);
+          .for("update");
         if (!reserve || Number(reserve.gravityBalance) < gravity) {
           throw new Error("INSUFFICIENT_RESERVE");
         }

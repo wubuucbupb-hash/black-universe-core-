@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, custodyLedgerTable, matrixAccountsTable, matrixTransactionsTable } from "@workspace/db";
-import { eq, sql, and, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { encrypt, decrypt } from "../lib/encryption";
+import { adjustBalance, recordPoolFee } from "../lib/matrixEngine";
 
 const router = Router();
 const FOUNDER_ACCOUNT = "111111111111";
@@ -122,55 +123,60 @@ router.post("/custody/release/:id", async (req, res): Promise<void> => {
 
   try {
     const entryId = Number(req.params.id);
-    const [entry] = await db
-      .select()
-      .from(custodyLedgerTable)
-      .where(eq(custodyLedgerTable.id, entryId))
-      .limit(1);
 
-    if (!entry) {
-      res.status(404).json({ error: "Custody entry not found" });
-      return;
-    }
+    // P4: lock the custody row, credit the receiver, and flip the status to
+    // RELEASED inside ONE atomic transaction. The FOR UPDATE lock means two
+    // concurrent releases can't both credit the receiver (no double-credit),
+    // and if any step fails the whole release rolls back.
+    await db.transaction(async (tx) => {
+      const [entry] = await tx
+        .select()
+        .from(custodyLedgerTable)
+        .where(eq(custodyLedgerTable.id, entryId))
+        .for("update");
 
-    if (entry.status !== "LOCKED") {
-      res.status(400).json({ error: `Cannot release entry with status: ${entry.status}` });
-      return;
-    }
+      if (!entry) throw new Error("NOT_FOUND");
+      if (entry.status !== "LOCKED") {
+        throw new Error(`NOT_LOCKED:${entry.status}`);
+      }
 
-    // If this is an escrow P2P transfer, complete the receiver credit now
-    if (entry.escrowToAccount && entry.escrowAmountEncrypted) {
-      const amount = parseFloat(decrypt(entry.escrowAmountEncrypted));
-      const tax = amount * 0.01;
-      const netTransfer = amount - tax;
+      // If this is an escrow P2P transfer, complete the receiver credit now.
+      if (entry.escrowToAccount && entry.escrowAmountEncrypted) {
+        const amount = parseFloat(decrypt(entry.escrowAmountEncrypted));
+        const tax = amount * 0.01;
+        const netTransfer = amount - tax;
 
-      await db
-        .update(matrixAccountsTable)
-        .set({ gravityBalance: sql`${matrixAccountsTable.gravityBalance} + ${netTransfer.toFixed(6)}` })
-        .where(eq(matrixAccountsTable.accountNumber, entry.escrowToAccount));
+        await adjustBalance(entry.escrowToAccount, netTransfer.toFixed(6), tx);
+        // P3: Founder tax is batch-aggregated within the same transaction.
+        await recordPoolFee(FOUNDER_ACCOUNT, tax.toFixed(6), "ESCROW_FEE", tx);
 
-      await db
-        .update(matrixAccountsTable)
-        .set({ gravityBalance: sql`${matrixAccountsTable.gravityBalance} + ${tax.toFixed(6)}` })
-        .where(eq(matrixAccountsTable.accountNumber, FOUNDER_ACCOUNT));
+        await tx.insert(matrixTransactionsTable).values({
+          txType: "ESCROW_RELEASE",
+          description: `🔓 [ESCROW RELEASED] ${entry.escrowFromAccount} → ${entry.escrowToAccount}: ${amount.toFixed(2)} Gravity`,
+          fromAccount: entry.escrowFromAccount,
+          toAccount: entry.escrowToAccount,
+          amount: amount.toFixed(6),
+        });
+      }
 
-      await db.insert(matrixTransactionsTable).values({
-        txType: "ESCROW_RELEASE",
-        description: `🔓 [ESCROW RELEASED] ${entry.escrowFromAccount} → ${entry.escrowToAccount}: ${amount.toFixed(2)} Gravity`,
-        fromAccount: entry.escrowFromAccount,
-        toAccount: entry.escrowToAccount,
-        amount: amount.toFixed(6),
-      });
-    }
-
-    await db
-      .update(custodyLedgerTable)
-      .set({ status: "RELEASED", releasedAt: new Date(), updatedAt: new Date() })
-      .where(eq(custodyLedgerTable.id, entryId));
+      await tx
+        .update(custodyLedgerTable)
+        .set({ status: "RELEASED", releasedAt: new Date(), updatedAt: new Date() })
+        .where(eq(custodyLedgerTable.id, entryId));
+    });
 
     res.json({ success: true, message: "Custody entry released" });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Release failed" });
+    const msg = err instanceof Error ? err.message : "Release failed";
+    if (msg === "NOT_FOUND") {
+      res.status(404).json({ error: "Custody entry not found" });
+    } else if (msg.startsWith("NOT_LOCKED:")) {
+      res.status(400).json({
+        error: `Cannot release entry with status: ${msg.slice("NOT_LOCKED:".length)}`,
+      });
+    } else {
+      res.status(500).json({ error: msg });
+    }
   }
 });
 
@@ -193,58 +199,69 @@ router.post("/custody/escrow", async (req, res): Promise<void> => {
       return;
     }
 
-    const [sender] = await db
-      .select()
-      .from(matrixAccountsTable)
-      .where(eq(matrixAccountsTable.accountNumber, senderAccount))
-      .limit(1);
-
-    if (!sender) {
-      res.status(404).json({ error: "Sender account not found" });
-      return;
-    }
-
     const txAmount = Number(amount);
-    if (parseFloat(String(sender.gravityBalance)) < txAmount) {
-      res.status(400).json({ error: "Insufficient balance for escrow" });
-      return;
-    }
 
-    // Deduct from sender immediately — funds locked in escrow
-    await db
-      .update(matrixAccountsTable)
-      .set({ gravityBalance: sql`${matrixAccountsTable.gravityBalance} - ${txAmount.toFixed(6)}` })
-      .where(eq(matrixAccountsTable.accountNumber, senderAccount));
+    // P1: lock the sender's wallet FOR UPDATE, check the floor, debit, and
+    // create the LOCKED custody entry — all in one atomic transaction.
+    const custodyId = await db.transaction(async (tx) => {
+      const [sender] = await tx
+        .select()
+        .from(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, senderAccount))
+        .for("update");
+      if (!sender) throw new Error("SENDER_NOT_FOUND");
 
-    // Create LOCKED custody entry
-    const [entry] = await db.insert(custodyLedgerTable).values({
-      ownerAccount: senderAccount,
-      assetType: "P2P_ESCROW",
-      valuationEncrypted: encrypt(txAmount.toFixed(6)),
-      descriptionEncrypted: encrypt(description ?? `P2P Transfer: ${senderAccount} → ${receiverAccount}`),
-      escrowAmountEncrypted: encrypt(txAmount.toFixed(6)),
-      escrowFromAccount: senderAccount,
-      escrowToAccount: receiverAccount,
-      status: "LOCKED",
-    }).returning();
+      // P2: strict floor of 0 — escrow can never push the wallet negative.
+      if (Number(sender.gravityBalance) < txAmount) {
+        throw new Error("INSUFFICIENT_BALANCE");
+      }
 
-    await db.insert(matrixTransactionsTable).values({
-      txType: "ESCROW_LOCK",
-      description: `🔒 [ESCROW LOCKED] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (awaiting Founder release)`,
-      fromAccount: senderAccount,
-      toAccount: receiverAccount,
-      amount: txAmount.toFixed(6),
+      // Deduct from sender immediately — funds locked in escrow.
+      await adjustBalance(senderAccount, (-txAmount).toFixed(6), tx);
+
+      const [entry] = await tx
+        .insert(custodyLedgerTable)
+        .values({
+          ownerAccount: senderAccount,
+          assetType: "P2P_ESCROW",
+          valuationEncrypted: encrypt(txAmount.toFixed(6)),
+          descriptionEncrypted: encrypt(
+            description ?? `P2P Transfer: ${senderAccount} → ${receiverAccount}`,
+          ),
+          escrowAmountEncrypted: encrypt(txAmount.toFixed(6)),
+          escrowFromAccount: senderAccount,
+          escrowToAccount: receiverAccount,
+          status: "LOCKED",
+        })
+        .returning();
+
+      await tx.insert(matrixTransactionsTable).values({
+        txType: "ESCROW_LOCK",
+        description: `🔒 [ESCROW LOCKED] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (awaiting Founder release)`,
+        fromAccount: senderAccount,
+        toAccount: receiverAccount,
+        amount: txAmount.toFixed(6),
+      });
+
+      return entry.id;
     });
 
     res.status(201).json({
       success: true,
-      custodyId: entry.id,
+      custodyId,
       status: "LOCKED",
       message: "Funds locked in escrow. Awaiting Founder release.",
       amount: txAmount,
     });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Escrow failed" });
+    const msg = err instanceof Error ? err.message : "Escrow failed";
+    if (msg === "SENDER_NOT_FOUND") {
+      res.status(404).json({ error: "Sender account not found" });
+    } else if (msg === "INSUFFICIENT_BALANCE") {
+      res.status(400).json({ error: "Insufficient balance for escrow" });
+    } else {
+      res.status(500).json({ error: msg });
+    }
   }
 });
 

@@ -2,6 +2,7 @@ import {
   db,
   matrixAccountsTable,
   matrixTransactionsTable,
+  pendingFeesTable,
   usersTable,
 } from "@workspace/db";
 import { eq, sql, like, inArray, notInArray } from "drizzle-orm";
@@ -101,6 +102,64 @@ export async function setBalance(
     .update(matrixAccountsTable)
     .set({ gravityBalance: value })
     .where(eq(matrixAccountsTable.accountNumber, accountNumber));
+}
+
+// ── Batch fee aggregation ──────────────────────────────────────────────────
+// High-frequency fees (e.g. the 1% P2P transfer charge) are NOT written to the
+// hot pool-account row on every transaction — that single row would serialise
+// every transfer. Instead each fee is appended to `pending_fees` (an append-
+// only insert, no row contention) inside the SAME atomic transaction as the
+// money move, so value is always conserved. A background job (flushPendingFees)
+// then aggregates the buffer into the pool account once per interval.
+export async function recordPoolFee(
+  poolAccount: string,
+  amount: string,
+  sourceType: string,
+  exec: DbExecutor = db,
+): Promise<void> {
+  await exec.insert(pendingFeesTable).values({ poolAccount, amount, sourceType });
+}
+
+let flushing = false;
+
+// Aggregates all buffered fees into their pool accounts in a single atomic
+// transaction and clears them. Overlapping calls are skipped, and rows are
+// locked with SKIP LOCKED so two workers never double-apply the same fee.
+export async function flushPendingFees(): Promise<{
+  flushed: number;
+  pools: number;
+}> {
+  if (flushing) return { flushed: 0, pools: 0 };
+  flushing = true;
+  try {
+    return await db.transaction(async (tx) => {
+      const pending = await tx
+        .select()
+        .from(pendingFeesTable)
+        .for("update", { skipLocked: true });
+      if (pending.length === 0) return { flushed: 0, pools: 0 };
+
+      const sums = new Map<string, number>();
+      for (const fee of pending) {
+        sums.set(
+          fee.poolAccount,
+          (sums.get(fee.poolAccount) ?? 0) + Number(fee.amount),
+        );
+      }
+      for (const [poolAccount, total] of sums) {
+        await adjustBalance(poolAccount, total.toFixed(6), tx);
+      }
+      await tx.delete(pendingFeesTable).where(
+        inArray(
+          pendingFeesTable.id,
+          pending.map((p) => p.id),
+        ),
+      );
+      return { flushed: pending.length, pools: sums.size };
+    });
+  } finally {
+    flushing = false;
+  }
 }
 
 export interface VaultStatus {

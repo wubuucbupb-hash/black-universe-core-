@@ -20,6 +20,7 @@ import {
   ensureUserMatrixAccount,
   logTx,
   mintGravity,
+  recordPoolFee,
 } from "../lib/matrixEngine";
 
 const router = Router();
@@ -185,19 +186,21 @@ router.post("/matrix/transfer", async (req, res): Promise<void> => {
 
   try {
     const { receiverAccount, amount } = req.body;
-    // Non-admin citizens may only send from their own linked wallet; any
-    // body-supplied senderAccount is ignored for them. Admins may pass one.
-    let senderAccount: string | undefined = req.body.senderAccount;
-    if (user.role !== "admin") {
-      if (!user.accountNumber) {
-        res.status(403).json({ error: "No wallet linked to your account" });
-        return;
-      }
-      senderAccount = user.accountNumber;
-    }
 
-    if (!senderAccount || !receiverAccount || !amount || Number(amount) <= 0) {
-      res.status(400).json({ error: "Sender, receiver and amount are required" });
+    // SECURITY (P2): the sender is ALWAYS the authenticated user's own wallet.
+    // The senderAccount body param has been removed entirely — even an admin
+    // can only move funds from their own wallet, so a compromised admin
+    // session can never drain another citizen's account.
+    if (!user.accountNumber) {
+      res.status(403).json({ error: "No wallet linked to your account" });
+      return;
+    }
+    const senderAccount = user.accountNumber;
+
+    if (!receiverAccount || !amount || Number(amount) <= 0) {
+      res
+        .status(400)
+        .json({ error: "Receiver and a positive amount are required" });
       return;
     }
 
@@ -206,54 +209,63 @@ router.post("/matrix/transfer", async (req, res): Promise<void> => {
       return;
     }
 
-    const [sender] = await db
-      .select()
-      .from(matrixAccountsTable)
-      .where(eq(matrixAccountsTable.accountNumber, senderAccount))
-      .limit(1);
-
-    if (!sender) {
-      res.status(404).json({ error: "Sender account not found" });
-      return;
-    }
-
-    const senderBalance = Number(sender.gravityBalance);
     const txAmount = Number(amount);
-
-    if (senderBalance < txAmount) {
-      res.status(400).json({ error: "Insufficient balance" });
-      return;
-    }
-
-    // The 1% transaction charge is deducted SEPARATELY from the sender — the
-    // receiver always gets the FULL amount (charge is not netted out of it).
-    // The sender must hold at least the transfer amount; the separate charge
-    // may push their wallet into overage (negative balance), which is recorded
-    // on the transaction.
+    // 1% charge to the Founder pool, deducted from the sender on top of the
+    // amount (the receiver always gets the full amount).
     const charge = txAmount * 0.01;
 
-    await adjustBalance(senderAccount, (-txAmount).toFixed(6));
-    await adjustBalance(receiverAccount, txAmount.toFixed(6));
-    await adjustBalance(senderAccount, (-charge).toFixed(6));
-    await adjustBalance(FOUNDER_ACCOUNT, charge.toFixed(6));
+    const newSenderBalance = await db.transaction(async (tx) => {
+      // P1: lock the sender's wallet row FOR UPDATE so concurrent transfers
+      // from the same wallet serialise — the balance check and the debit are
+      // now atomic, eliminating the check-then-write race / overdraft.
+      const [sender] = await tx
+        .select()
+        .from(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, senderAccount))
+        .for("update");
+      if (!sender) throw new Error("SENDER_NOT_FOUND");
 
-    const newSenderBalance = senderBalance - txAmount - charge;
-    const overage = newSenderBalance < 0 ? -newSenderBalance : 0;
+      // Receiver must exist, otherwise the credit silently vanishes.
+      const [receiver] = await tx
+        .select({ accountNumber: matrixAccountsTable.accountNumber })
+        .from(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, receiverAccount))
+        .limit(1);
+      if (!receiver) throw new Error("RECEIVER_NOT_FOUND");
 
-    await logTx(
-      "P2P_TRANSFER",
-      `💸 [P2P TX] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (full; charge separate)`,
-      senderAccount,
-      receiverAccount,
-      txAmount.toFixed(6),
-    );
-    await logTx(
-      "TX_CHARGE",
-      `🔥 [CHARGE] 1% (${charge.toFixed(2)} Gravity) → Founder, deducted from ${sender.name}${overage > 0 ? ` ⚠️ ACCOUNT OVERAGE: -${overage.toFixed(2)} Gravity` : ""}`,
-      senderAccount,
-      FOUNDER_ACCOUNT,
-      charge.toFixed(6),
-    );
+      const senderBalance = Number(sender.gravityBalance);
+      // P2: strict balance floor of 0. The amount AND the 1% fee must both fit
+      // — a transfer can never push the wallet below zero (no overage).
+      if (senderBalance < txAmount + charge) {
+        throw new Error("INSUFFICIENT_BALANCE");
+      }
+
+      await adjustBalance(senderAccount, (-(txAmount + charge)).toFixed(6), tx);
+      await adjustBalance(receiverAccount, txAmount.toFixed(6), tx);
+      // P3: the Founder fee is buffered (batch-aggregated) instead of writing
+      // the hot Founder row on every transfer. Recorded in the SAME tx, so
+      // total value is always conserved.
+      await recordPoolFee(FOUNDER_ACCOUNT, charge.toFixed(6), "P2P_FEE", tx);
+
+      await logTx(
+        "P2P_TRANSFER",
+        `💸 [P2P TX] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (full; charge separate)`,
+        senderAccount,
+        receiverAccount,
+        txAmount.toFixed(6),
+        tx,
+      );
+      await logTx(
+        "TX_CHARGE",
+        `🔥 [CHARGE] 1% (${charge.toFixed(2)} Gravity) → Founder, deducted from ${sender.name}`,
+        senderAccount,
+        FOUNDER_ACCOUNT,
+        charge.toFixed(6),
+        tx,
+      );
+
+      return senderBalance - txAmount - charge;
+    });
 
     res.json({
       success: true,
@@ -261,11 +273,22 @@ router.post("/matrix/transfer", async (req, res): Promise<void> => {
       received: txAmount,
       charge,
       newSenderBalance,
-      overage,
+      overage: 0,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Transfer failed";
-    res.status(500).json({ error: msg });
+    if (msg === "SENDER_NOT_FOUND") {
+      res.status(404).json({ error: "Sender account not found" });
+    } else if (msg === "RECEIVER_NOT_FOUND") {
+      res.status(404).json({ error: "Receiver account not found" });
+    } else if (msg === "INSUFFICIENT_BALANCE") {
+      res.status(400).json({
+        error:
+          "Insufficient balance — the amount plus the 1% fee exceeds your wallet",
+      });
+    } else {
+      res.status(500).json({ error: msg });
+    }
   }
 });
 
@@ -285,26 +308,21 @@ router.post("/matrix/equity/buy", async (req, res): Promise<void> => {
     }
 
     const accountNumber = await ensureUserMatrixAccount(user);
-
-    const [account] = await db
-      .select()
-      .from(matrixAccountsTable)
-      .where(eq(matrixAccountsTable.accountNumber, accountNumber))
-      .limit(1);
-
-    if (!account) {
-      res.status(404).json({ error: "Your wallet was not found" });
-      return;
-    }
-
-    if (Number(account.gravityBalance) < gravityAmount) {
-      res.status(400).json({ error: "Insufficient Gravity balance" });
-      return;
-    }
-
     const equityUnits = gravityAmount / EQUITY_PRICE_GRAVITY;
 
     await db.transaction(async (tx) => {
+      // P1: lock the buyer's wallet FOR UPDATE, then re-read the balance inside
+      // the transaction so the sufficiency check and the debit are atomic.
+      const [account] = await tx
+        .select()
+        .from(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, accountNumber))
+        .for("update");
+      if (!account) throw new Error("WALLET_NOT_FOUND");
+      if (Number(account.gravityBalance) < gravityAmount) {
+        throw new Error("INSUFFICIENT_BALANCE");
+      }
+
       await adjustBalance(accountNumber, (-gravityAmount).toFixed(6), tx);
       await adjustBalance(GROWTH_ACCOUNT, gravityAmount.toFixed(6), tx);
       await adjustEquity(accountNumber, equityUnits.toFixed(6), tx);
@@ -326,7 +344,13 @@ router.post("/matrix/equity/buy", async (req, res): Promise<void> => {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Equity purchase failed";
-    res.status(500).json({ error: msg });
+    if (msg === "WALLET_NOT_FOUND") {
+      res.status(404).json({ error: "Your wallet was not found" });
+    } else if (msg === "INSUFFICIENT_BALANCE") {
+      res.status(400).json({ error: "Insufficient Gravity balance" });
+    } else {
+      res.status(500).json({ error: msg });
+    }
   }
 });
 

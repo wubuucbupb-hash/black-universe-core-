@@ -1,0 +1,22 @@
+Task: BlackUniverse.world - System Hardening & Scaling
+​Objective: Secure the financial engine, eliminate race conditions, and prepare for production-scale traffic.
+​Priority 1: Transactional Integrity (CRITICAL)
+​Task: Wrap all money-moving functions (transfer, buy equity, gravity-purchase, escrow-release) in ACID-compliant database transactions.
+​Goal: Eliminate race conditions where concurrent P2P transfers could result in negative balances or double-credits.
+​Requirement: Ensure SELECT ... FOR UPDATE is used on wallet balances before committing any balance change.
+​Priority 2: Security Patching (CRITICAL)
+​Task: Remove the senderAccount parameter from the transfer endpoint in matrix.ts.
+​Goal: Prevent compromised admin sessions from draining any citizen account. The system must only allow the authenticated session user to send from their own wallet.
+​Task: Implement a strict "Balance Floor" of 0. Prevent any transaction that would push a wallet balance below zero, including the 1% fee deduction.
+​Priority 3: System Pool Bottleneck Fix
+​Task: Implement "Batch Aggregation" for System Pool accounts (Founder, Reserve, Growth).
+​Goal: Instead of hitting the DB for every single 1% fee update, buffer the fees in an in-memory queue or a "PendingFee" table and write to the main Pool account in batches every 60 seconds.
+​Priority 4: Atomic Custody Flow
+​Task: Refactor custody/release in custody.ts to be fully atomic.
+​Goal: Ensure the credit to the receiver and the "RELEASED" status update happen in a single, inseparable database operation. If one fails, the entire action must rollback.
+​Priority 5: Scaling & Stress Testing
+​Task: Execute scripts/stress-test.mjs against the updated logic.
+​Goal: Simulate 10,000+ rapid-fire transactions. Measure latency and identify if the DB connection pool reaches its limit.
+​Requirement: Provide a report on "Bottlenecks" found during the stress test.
+​Execution Suggestion:
+Bhai, Agent ko bolo: "Implement these 5 tasks one by one. After each task, verify the code and run the existing test suite to ensure no regressions are introduced."

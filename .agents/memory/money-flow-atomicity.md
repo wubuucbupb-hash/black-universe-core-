@@ -1,29 +1,38 @@
 ---
-name: Money-flow atomicity gaps
-description: Which value-mutating API paths are NOT transaction-safe and must be hardened before scaling.
+name: Money-flow atomicity & invariants
+description: The hardened invariants every value-mutating API path must keep. Do NOT revert these.
 ---
 
-Audit of the Black Universe value-mutating routes found these durable gaps:
+All value-mutating Black Universe routes are now transaction-safe. These are the
+durable invariants — treat them as constraints, not suggestions, and do not
+"simplify" them back to the older non-atomic shapes.
 
-- **P2P transfer (`matrix/transfer`)** does a balance check then 4 sequential
-  `adjustBalance` writes with **no `db.transaction`** → concurrent transfers from
-  the same wallet can race past the "Insufficient balance" check (overdraft / drain).
-- **`custody/release`** credits receiver + updates status non-atomically → an admin
-  retry after partial failure can **double-credit**.
-- **`adjustBalance` has no negative floor** — the 1% transfer charge can push a
-  wallet negative ("overage"); this is currently by design.
-- **`custody/lock` is open to any citizen** with arbitrary `ownerAccount` /
-  `valuation` (pollutes the audit ledger). Should be admin-only or owner-forced.
-- **Admins can pass `senderAccount`** on transfer to move funds from any account
-  (powerful but single catastrophic point if an admin is compromised).
+- **Every multi-write money path runs inside one `db.transaction` with row locking.**
+  Sender (and other mutated wallet rows) are taken with `SELECT … FOR UPDATE`
+  INSIDE the tx, then balance is re-checked, then debited/credited. Applies to:
+  P2P transfer, equity/buy, INR→Gravity admin-approve, custody escrow + release.
+  **Why:** without the lock, concurrent requests read a stale balance and race past
+  the check (overdraft / double-credit). Proven via a 30-concurrent-transfer race
+  test: only the affordable N succeed, balance never goes negative.
 
-Already safe (do NOT "fix" again): `matrix/equity/buy` and the INR→Gravity
-admin-approve path ARE wrapped in `db.transaction`; approve has a double-approve
-status guard + reserve-balance check; mint is admin-only with a 200% backing check.
+- **Strict balance floor of 0 — this REVERSES the old "overage by design" note.**
+  Transfer blocks if `amount + 1% fee` would push the wallet below 0; it no longer
+  lets the fee drive a balance negative. **Why:** an overdraftable wallet is a drain
+  vector under concurrency. Do not reintroduce a negative-allowed path.
 
-**Why:** money correctness must precede horizontal scaling — adding API replicas
-multiplies the race window on the non-atomic paths.
+- **`senderAccount` is gone from the transfer API.** A transfer ALWAYS moves the
+  authenticated user's own wallet (`user.accountNumber`); even admins cannot pass an
+  arbitrary source. **Why:** removed the single catastrophic "move funds from any
+  account" capability.
 
-**How to apply:** before scaling or editing these routes, wrap each multi-write
-money path in a single transaction with row locking (`SELECT … FOR UPDATE`) or
-atomic conditional updates. Never assume transfer/escrow are race-safe.
+- **Pool fees are buffered, not credited inline.** Within the money tx the fee is
+  appended to the durable `pending_fees` table; a 60s background flusher aggregates
+  by pool account and credits it (uses `FOR UPDATE SKIP LOCKED` + an in-process
+  `flushing` guard). **Why:** crediting shared pool rows (FOUNDER, etc.) inside every
+  transfer serializes the whole system on those hot rows. Don't move pool credits
+  back into the request path. Value is conserved: debit happens in the tx, the buffer
+  is the deferred half.
+
+**How to apply:** before editing transfer / equity / approve / custody, keep the
+tx + `FOR UPDATE` + floor + `recordPoolFee(...)` shape. Never assume these paths are
+race-safe without the lock; never inline pool credits; never re-add `senderAccount`.

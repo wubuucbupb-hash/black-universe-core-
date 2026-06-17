@@ -4,3 +4,4 @@ export * from "./matrix";
 export * from "./custody";
 export * from "./passwordResetTokens";
 export * from "./gravityGateway";
+export * from "./pendingFees";
