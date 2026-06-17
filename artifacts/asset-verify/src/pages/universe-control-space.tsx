@@ -180,35 +180,6 @@ export default function UniverseControlSpace() {
     });
   }
 
-  // ── Vault Control (top-up / re-anchor) ──────────────────────────────────
-  const [vaultForm, setVaultForm] = useState({
-    topup: "",
-    setValue: "",
-    syncCore: false,
-  });
-  const vaultMutation = useMutation({
-    mutationFn: (body: object) =>
-      apiFetch("/api/admin/vault/anchor", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    onSuccess: () => {
-      toast({
-        title: "🏦 Vault Updated",
-        description: "Vault backing has been adjusted.",
-      });
-      setVaultForm({ topup: "", setValue: "", syncCore: false });
-      qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
-      qc.invalidateQueries({ queryKey: ["matrix-logs"] });
-    },
-    onError: (e: Error) =>
-      toast({
-        title: "Vault Update Failed",
-        description: e.message,
-        variant: "destructive",
-      }),
-  });
-
   // ── Submit Asset ────────────────────────────────────────────────────────
   const submit = useSubmitAsset();
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
@@ -248,6 +219,15 @@ export default function UniverseControlSpace() {
   };
 
   const onSubmit = (values: z.infer<typeof submitSchema>) => {
+    if (uploadedDocs.length === 0) {
+      toast({
+        title: "Proof Documents Required",
+        description:
+          "Attach at least one proof document (papers / terms / legal) before submitting this asset.",
+        variant: "destructive",
+      });
+      return;
+    }
     submit.mutate(
       {
         data: {
@@ -594,92 +574,19 @@ export default function UniverseControlSpace() {
                       </div>
                     </div>
 
-                    {/* Top up */}
-                    <div className="border border-zinc-800 rounded-md p-3 space-y-2">
-                      <label className="text-zinc-400 text-xs font-mono">
-                        Top up Vault (add Gravity)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="e.g., 500 (Gravity)"
-                        value={vaultForm.topup}
-                        onChange={(e) =>
-                          setVaultForm({ ...vaultForm, topup: e.target.value })
-                        }
-                        className="w-full bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                        data-testid="input-vault-topup"
-                      />
-                      <button
-                        onClick={() =>
-                          vaultMutation.mutate({ vaultTopup: vaultForm.topup })
-                        }
-                        disabled={
-                          vaultMutation.isPending ||
-                          !vaultForm.topup ||
-                          Number(vaultForm.topup) <= 0
-                        }
-                        className="w-full py-2 bg-yellow-500/90 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-md text-sm"
-                        data-testid="button-vault-topup"
-                      >
-                        🏦 Add to Vault
-                      </button>
-                    </div>
-
-                    {/* Re-anchor */}
-                    <div className="border border-zinc-800 rounded-md p-3 space-y-2">
-                      <label className="text-zinc-400 text-xs font-mono">
-                        Re-anchor Vault (set absolute Gravity value)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="e.g., 200000 (Gravity)"
-                        value={vaultForm.setValue}
-                        onChange={(e) =>
-                          setVaultForm({
-                            ...vaultForm,
-                            setValue: e.target.value,
-                          })
-                        }
-                        className="w-full bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                        data-testid="input-vault-setvalue"
-                      />
-                      <label className="flex items-center gap-2 text-zinc-400 text-xs font-mono">
-                        <input
-                          type="checkbox"
-                          checked={vaultForm.syncCore}
-                          onChange={(e) =>
-                            setVaultForm({
-                              ...vaultForm,
-                              syncCore: e.target.checked,
-                            })
-                          }
-                          data-testid="checkbox-sync-core"
-                        />
-                        Also re-anchor System Core gravity to circulating supply
-                      </label>
-                      <button
-                        onClick={() =>
-                          vaultMutation.mutate({
-                            vaultValue: vaultForm.setValue,
-                            reAnchorCore: vaultForm.syncCore,
-                          })
-                        }
-                        disabled={
-                          vaultMutation.isPending ||
-                          (vaultForm.setValue === "" && !vaultForm.syncCore)
-                        }
-                        className="w-full py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-md text-sm"
-                        data-testid="button-vault-reanchor"
-                      >
-                        ⚓ Re-anchor Vault
-                      </button>
-                      <p className="text-zinc-600 text-[10px] font-mono">
-                        Migration: set the Vault to ≥200% of the gravity value,
-                        and tick the box to sync System Core to the live supply.
+                    {/* Vault is locked to documented deposits only */}
+                    <div className="border border-zinc-800 rounded-md p-4 bg-black/40 space-y-2 text-[11px] font-mono">
+                      <p className="text-zinc-200 font-bold flex items-center gap-2">
+                        <Lock className="h-3.5 w-3.5 text-emerald-400" />
+                        Vault is locked to documented deposits
+                      </p>
+                      <p className="text-zinc-400 leading-relaxed">
+                        The Vault value can only change when a real asset — with
+                        proof documents (papers / terms / legal) — is submitted,
+                        approved, and deposited through the asset pipeline. There
+                        is no manual top-up or re-anchor; numbers cannot be set
+                        arbitrarily. Once deposited, the backing stays fixed
+                        unless another documented asset is deposited.
                       </p>
                     </div>
                   </div>
@@ -808,8 +715,8 @@ export default function UniverseControlSpace() {
                               />
                             </FormControl>
                             <FormDescription>
-                              Optional. Provide a reference number here if you
-                              don't have a file to upload — or do both.
+                              Optional extra reference (e.g., registration / deed
+                              number) to accompany your uploaded documents.
                             </FormDescription>
                             <FormMessage />
                           </FormItem>
@@ -819,11 +726,12 @@ export default function UniverseControlSpace() {
                       <div className="space-y-3">
                         <div>
                           <p className="text-sm font-medium leading-none mb-1">
-                            Proof Documents
+                            Proof Documents{" "}
+                            <span className="text-red-500">*</span>
                           </p>
                           <p className="text-sm text-muted-foreground mb-3">
                             Upload images or PDFs of deeds, titles, certificates,
-                            or any supporting proof (optional).
+                            or any supporting proof (required).
                           </p>
                         </div>
 

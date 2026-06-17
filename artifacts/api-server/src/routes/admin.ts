@@ -17,12 +17,8 @@ import {
 import {
   ensureUserMatrixAccount,
   adjustBalance,
-  setBalance,
   logTx,
-  getVaultStatus,
-  totalDistributedGravity,
   VAULT_ACCOUNT,
-  SYSTEM_MAIN,
   GRAVITY_RATE,
 } from "../lib/matrixEngine";
 import { encrypt } from "../lib/encryption";
@@ -275,68 +271,6 @@ router.post("/admin/assets/:id/deposit", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err, assetId: id }, "Deposit failed; transaction rolled back");
     res.status(500).json({ error: "Deposit failed" });
-  }
-});
-
-// ── POST /api/admin/vault/anchor ───────────────────────────────────────────
-// Founder/admin Vault control. Top up the vault (add ₹), re-anchor it to an
-// absolute ₹ value, and/or re-anchor System Core gravity to the true circulating
-// supply. Lets the founder seed/migrate the 200% backing without a direct DB
-// write. All three levers are optional and applied atomically.
-router.post("/admin/vault/anchor", async (req, res): Promise<void> => {
-  if (!(await requireAdmin(req, res))) return;
-
-  const { vaultTopup, vaultValue, reAnchorCore } = req.body ?? {};
-
-  try {
-    await db.transaction(async (tx) => {
-      if (vaultTopup != null && vaultTopup !== "" && Number(vaultTopup) > 0) {
-        const amt = Number(vaultTopup);
-        await adjustBalance(VAULT_ACCOUNT, amt.toFixed(6), tx);
-        await logTx(
-          "VAULT",
-          `🏦 [VAULT TOP-UP] +${amt.toFixed(2)} G added to Vault backing`,
-          undefined,
-          VAULT_ACCOUNT,
-          amt.toFixed(6),
-          tx,
-        );
-      }
-
-      if (vaultValue != null && vaultValue !== "") {
-        const val = Number(vaultValue);
-        if (Number.isFinite(val) && val >= 0) {
-          await setBalance(VAULT_ACCOUNT, val.toFixed(6), tx);
-          await logTx(
-            "VAULT",
-            `🏦 [VAULT RE-ANCHOR] Vault gravity set to ${val.toFixed(2)} G`,
-            undefined,
-            VAULT_ACCOUNT,
-            val.toFixed(6),
-            tx,
-          );
-        }
-      }
-
-      if (reAnchorCore) {
-        const total = await totalDistributedGravity(tx);
-        await setBalance(SYSTEM_MAIN, total.toFixed(6), tx);
-        await logTx(
-          "VAULT",
-          `🌌 [CORE RE-ANCHOR] System Core gravity set to circulating supply ${total.toFixed(2)} G`,
-          undefined,
-          SYSTEM_MAIN,
-          total.toFixed(6),
-          tx,
-        );
-      }
-    });
-
-    const status = await getVaultStatus();
-    res.json({ success: true, status });
-  } catch (err) {
-    req.log.error({ err }, "Vault anchor failed");
-    res.status(500).json({ error: "Vault anchor failed" });
   }
 });
 
