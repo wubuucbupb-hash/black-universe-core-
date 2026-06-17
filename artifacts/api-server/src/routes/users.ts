@@ -247,7 +247,7 @@ router.post("/users/forgot-password", async (req, res): Promise<void> => {
       return;
     }
 
-    const token = randomBytes(32).toString("hex");
+    const token = randomBytes(8).toString("hex");
     const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
@@ -297,7 +297,7 @@ router.post("/users/reset-password", async (req, res): Promise<void> => {
       return;
     }
 
-    const tokenHash = hashResetToken(token);
+    const tokenHash = hashResetToken(String(token).trim());
 
     const [resetRow] = await db
       .select()

@@ -145,7 +145,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: values.token,
+          token: values.token.trim(),
           password: values.newPassword,
         }),
       });
