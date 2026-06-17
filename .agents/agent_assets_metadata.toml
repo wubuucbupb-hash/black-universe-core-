@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "NHnzmbHFJFZDbBVcI5jYB"
 uri = "file://artifacts/mobile/assets/images/icon.png"
 type = "image"
 title = "black universe icon"
+
+[[outputs]]
+id = "3fFoZRo4baDWtstXL8gy2"
+uri = "file://docs/architecture.md"
+type = "text"
+title = "Black Universe — System Architecture (with flowcharts)"
