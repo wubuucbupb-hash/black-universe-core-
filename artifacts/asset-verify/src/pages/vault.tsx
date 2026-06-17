@@ -191,7 +191,7 @@ export default function VaultPage() {
                 </div>
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">Amount (Gravity)</label>
-                  <input type="number" min="0" step="100" placeholder="0.00" value={escrowForm.amount}
+                  <input type="number" min="0" step="0.0001" placeholder="0.0000" value={escrowForm.amount}
                     onChange={(e) => setEscrowForm({ ...escrowForm, amount: e.target.value })}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none" />
                 </div>

@@ -459,8 +459,8 @@ export default function MatrixEngine() {
                   <input
                     type="number"
                     min="0"
-                    step="1"
-                    placeholder="0.00"
+                    step="0.0001"
+                    placeholder="0.0000"
                     value={txForm.amount}
                     onChange={(e) => {
                       const v = e.target.value;

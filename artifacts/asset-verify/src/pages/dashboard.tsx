@@ -439,7 +439,7 @@ export default function Dashboard() {
                     <Input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="0.0001"
                       value={txForm.amount}
                       onChange={(e) => {
                         const v = e.target.value;
