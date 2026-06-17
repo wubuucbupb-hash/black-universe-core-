@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/hooks/use-toast";
@@ -7,6 +7,9 @@ import {
   useListMyAssets,
   getListMyAssetsQueryKey,
 } from "@workspace/api-client-react";
+import { ObjectUploader } from "@workspace/object-storage-web";
+import type { UploadResult } from "@uppy/core";
+import { FileText, X, CheckCircle2 } from "lucide-react";
 import {
   GRAVITY_RATE,
   STATIC_INR_PER_UNIT,
@@ -47,6 +50,8 @@ function fmtDate(d: string) {
   }
 }
 
+type UploadedDoc = { name: string; objectPath: string };
+
 export default function MatrixEngine() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -66,12 +71,15 @@ export default function MatrixEngine() {
   const myAccount = accounts.find(
     (a) => a.accountNumber === user?.accountNumber,
   );
-  // Selectable transfer counterparties (exclude the System Core sink).
+  // Selectable transfer counterparties. Regular citizens never see the System
+  // Core (000000000000) or Reserve Vault (000000000001); admins can route funds
+  // through them, so they get the full account list.
   const allWallets = accounts.filter(
     (a) =>
       a.accountNumber !== "000000000000" &&
       a.accountNumber !== "000000000001",
   );
+  const transferWallets = isAdmin ? accounts : allWallets;
 
   // The logged-in user's own transaction history.
   const { data: txData } = useQuery({
@@ -91,9 +99,38 @@ export default function MatrixEngine() {
   );
 
   // ── Mint Form (Founder only) ────────────────────────────────────────────────
-  const [mintForm, setMintForm] = useState({ inrValue: "", assetTitle: "" });
+  const [mintForm, setMintForm] = useState({
+    inrValue: "",
+    assetTitle: "",
+    assetType: "real_estate",
+    description: "",
+  });
   const gravityPreview =
     Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
+
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const objectPathsRef = useRef<Map<string, UploadedDoc>>(new Map());
+
+  const handleUploadComplete = (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>,
+  ) => {
+    const newDocs: UploadedDoc[] = [];
+    for (const file of result.successful ?? []) {
+      const stored = objectPathsRef.current.get(file.id);
+      if (stored) newDocs.push(stored);
+    }
+    setUploadedDocs((prev) => [...prev, ...newDocs]);
+    if (newDocs.length > 0) {
+      toast({
+        title: "Document Uploaded",
+        description: `${newDocs.length} file(s) ready to attach to this mint.`,
+      });
+    }
+  };
+
+  const removeDoc = (objectPath: string) => {
+    setUploadedDocs((prev) => prev.filter((d) => d.objectPath !== objectPath));
+  };
 
   const mintMutation = useMutation({
     mutationFn: (body: object) =>
@@ -103,7 +140,14 @@ export default function MatrixEngine() {
         title: "🔥 Mint Complete!",
         description: `${fmt(data.gravityTotal)} Gravity injected into the matrix`,
       });
-      setMintForm({ inrValue: "", assetTitle: "" });
+      setMintForm({
+        inrValue: "",
+        assetTitle: "",
+        assetType: "real_estate",
+        description: "",
+      });
+      setUploadedDocs([]);
+      objectPathsRef.current.clear();
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
     },
     onError: (e: Error) =>
@@ -123,9 +167,21 @@ export default function MatrixEngine() {
       });
       return;
     }
+    if (uploadedDocs.length === 0) {
+      toast({
+        title: "Proof Documents Required",
+        description:
+          "Attach at least one proof document (papers / terms / legal) backing this mint.",
+        variant: "destructive",
+      });
+      return;
+    }
     mintMutation.mutate({
       inrValue: mintForm.inrValue,
       assetTitle: mintForm.assetTitle,
+      assetType: mintForm.assetType,
+      description: mintForm.description,
+      documentUrls: uploadedDocs.map((d) => d.objectPath),
     });
   }
 
@@ -268,6 +324,25 @@ export default function MatrixEngine() {
 
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">
+                    Asset Class *
+                  </label>
+                  <select
+                    value={mintForm.assetType}
+                    onChange={(e) =>
+                      setMintForm({ ...mintForm, assetType: e.target.value })
+                    }
+                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  >
+                    <option value="real_estate">Real Estate</option>
+                    <option value="commodity">Commodity</option>
+                    <option value="equity">Equity</option>
+                    <option value="debt">Debt</option>
+                    <option value="money_market">Money Market</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
                     Asset Valuation in INR (₹) *
                   </label>
                   <input
@@ -285,6 +360,91 @@ export default function MatrixEngine() {
                     <p className="text-cyan-400 text-xs mt-1 font-mono">
                       ✨ Liquidity Expansion: {fmt(gravityPreview)} Gravity Notes
                     </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    Asset Details / Notes
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe the backing asset, terms, references…"
+                    value={mintForm.description}
+                    onChange={(e) =>
+                      setMintForm({ ...mintForm, description: e.target.value })
+                    }
+                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    Proof Documents <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-zinc-600 text-[11px] font-mono mt-1 mb-2">
+                    Upload deeds, titles, certificates or terms (images / PDF,
+                    max 10 MB each). Required to back this mint.
+                  </p>
+                  <ObjectUploader
+                    maxNumberOfFiles={5}
+                    maxFileSize={10 * 1024 * 1024}
+                    onGetUploadParameters={async (file) => {
+                      const res = await fetch(
+                        "/api/storage/uploads/request-url",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({
+                            name: file.name,
+                            size: file.size,
+                            contentType: file.type,
+                          }),
+                        },
+                      );
+                      const { uploadURL, objectPath } = await res.json();
+                      objectPathsRef.current.set(file.id, {
+                        name: file.name,
+                        objectPath,
+                      });
+                      return {
+                        method: "PUT" as const,
+                        url: uploadURL,
+                        headers: { "Content-Type": file.type },
+                      };
+                    }}
+                    onComplete={handleUploadComplete}
+                    buttonClassName="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-zinc-700 bg-black hover:bg-zinc-900 text-sm font-medium text-zinc-300 transition-colors w-full justify-center"
+                  >
+                    <FileText className="h-4 w-4" /> Upload Proof Documents
+                  </ObjectUploader>
+
+                  {uploadedDocs.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      <p className="text-sm font-medium text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4" />{" "}
+                        {uploadedDocs.length} document(s) attached
+                      </p>
+                      {uploadedDocs.map((doc) => (
+                        <div
+                          key={doc.objectPath}
+                          className="flex items-center justify-between bg-black border border-zinc-800 rounded px-3 py-2 text-sm"
+                        >
+                          <div className="flex items-center gap-2 text-zinc-400 truncate">
+                            <FileText className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">{doc.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeDoc(doc.objectPath)}
+                            className="ml-2 text-zinc-500 hover:text-red-400 flex-shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 
@@ -327,7 +487,7 @@ export default function MatrixEngine() {
                       className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
                     >
                       <option value="">— Select Sender —</option>
-                      {allWallets.map((a) => (
+                      {transferWallets.map((a) => (
                         <option key={a.accountNumber} value={a.accountNumber}>
                           {a.name} ({a.accountNumber}) [Bal: {fmt(a.gravityBalance)}]
                         </option>
@@ -369,7 +529,7 @@ export default function MatrixEngine() {
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
                   >
                     <option value="">— Select Receiver —</option>
-                    {allWallets
+                    {transferWallets
                       .filter(
                         (a) => isAdmin || a.accountNumber !== user?.accountNumber,
                       )

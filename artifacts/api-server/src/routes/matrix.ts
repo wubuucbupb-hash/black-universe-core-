@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { db, matrixAccountsTable, matrixTransactionsTable, usersTable } from "@workspace/db";
+import { assetsTable, db, matrixAccountsTable, matrixTransactionsTable, usersTable } from "@workspace/db";
 import { eq, desc, isNull, or } from "drizzle-orm";
 import {
   FOUNDER_ACCOUNT,
@@ -110,12 +110,17 @@ router.post("/matrix/mint", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
   try {
-    const { inrValue, assetTitle } = req.body;
+    const { inrValue, assetTitle, assetType, description, documentUrls } =
+      req.body;
 
     if (!inrValue || Number(inrValue) <= 0 || !assetTitle?.trim()) {
       res.status(400).json({ error: "INR value and asset title are required" });
       return;
     }
+
+    const docs: string[] = Array.isArray(documentUrls)
+      ? documentUrls.filter((u): u is string => typeof u === "string" && !!u)
+      : [];
 
     // System mint: the growth share routes to the Growth Pool so the Founder
     // always receives exactly 1% (never doubled via a user-selected target).
@@ -124,6 +129,31 @@ router.post("/matrix/mint", async (req, res): Promise<void> => {
       assetTitle: String(assetTitle),
       targetWallet: GROWTH_ACCOUNT,
     });
+
+    // Persist the documented asset backing this mint so the proof papers are
+    // retained and visible in the asset registry. Marked already-minted so it is
+    // never re-deposited through the normal approval pipeline.
+    if (docs.length > 0) {
+      const userId = req.session?.userId;
+      if (userId) {
+        await db.insert(assetsTable).values({
+          userId,
+          assetType:
+            typeof assetType === "string" && assetType.trim()
+              ? assetType
+              : "real_estate",
+          claimedValue: String(inrValue),
+          description:
+            typeof description === "string" && description.trim()
+              ? `${assetTitle} — ${description}`
+              : String(assetTitle),
+          documentUrls: docs,
+          status: "minted",
+          mintedAt: new Date(),
+          gravityIssued: String(gravityTotal),
+        });
+      }
+    }
 
     res.json({ success: true, gravityTotal, splits });
   } catch (err: unknown) {

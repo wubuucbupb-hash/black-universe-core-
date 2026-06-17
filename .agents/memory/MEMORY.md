@@ -13,4 +13,5 @@
 - [Universal currency + live FX](universal-currency-fx.md) — transfer form supports ANY world currency via Intl + live open.er-api.com rates (INR base); Gravity anchored ₹10000=1; keep static fallback, don't revert to hardcoded list.
 - [Expo merge breaks shadcn typecheck](expo-merge-types-react-dup.md) — after mobile artifact merged, asset-verify typecheck fails in shadcn UI files (duplicate @types/react); not feature-caused, app still runs.
 - [Dark theme + bg-white = invisible text](dark-theme-white-bg-invisible-text.md) — asset-verify is dark (light foreground); any bg-white surface without forced dark text renders unreadable. Use bg-card/dark select styling.
+- [Matrix system-account access & documented mint](matrix-system-account-access.md) — admins intentionally see System Main + Reserve Vault in transfer dropdowns (don't re-lock); Founder Mint records optional proof docs as a status:"minted" asset.
 - [Gravity atomic transfers vs display](gravity-atomic-display.md) — 0.0001 IS transferred & stored (numeric(30,6)+toFixed(6)); "shows 00" is pure display rounding (fmt/fmtG maxFractionDigits:2) + input step, NOT a real bug.
