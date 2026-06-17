@@ -4,7 +4,7 @@ import {
   matrixTransactionsTable,
   usersTable,
 } from "@workspace/db";
-import { eq, sql, like } from "drizzle-orm";
+import { eq, sql, like, inArray, notInArray } from "drizzle-orm";
 
 // Either the root db handle or a transaction handle from db.transaction(...).
 // Lets callers run engine operations inside an atomic transaction.
@@ -18,6 +18,15 @@ export const RESERVE_ACCOUNT = "222222222222";
 export const STABILITY_ACCOUNT = "333333333333";
 export const SECURITY_ACCOUNT = "444444444444";
 export const GROWTH_ACCOUNT = "555555555555";
+
+// The Vault holds the real-world ₹ value backing the gravity supply. It is kept
+// SEPARATE from System Core (which holds the total minted Gravity). At all times
+// the vault must hold at least 200% of the System Core gravity value.
+export const VAULT_ACCOUNT = "000000000001";
+// ₹ value represented by one unit of Gravity (₹10,000 = 1 G).
+export const GRAVITY_RATE = 10000;
+// Required over-collateralization: vault value must be ≥ 200% of gravity value.
+export const VAULT_BACKING_RATIO = 2;
 
 // Network cluster layers a citizen can join at registration. The chosen digit
 // becomes the account-number prefix; cluster 7 (Citizen) is the default.
@@ -65,6 +74,81 @@ export async function adjustBalance(
     .where(eq(matrixAccountsTable.accountNumber, accountNumber));
 }
 
+// Absolute set (not a delta) — used by the Vault top-up / re-anchor admin tool.
+export async function setBalance(
+  accountNumber: string,
+  value: string,
+  exec: DbExecutor = db,
+): Promise<void> {
+  await exec
+    .update(matrixAccountsTable)
+    .set({ gravityBalance: value })
+    .where(eq(matrixAccountsTable.accountNumber, accountNumber));
+}
+
+export interface VaultStatus {
+  vaultValue: number; // ₹ value currently held in the Vault
+  coreGravity: number; // total minted Gravity in System Core
+  backingValue: number; // ₹ value of that gravity (coreGravity × GRAVITY_RATE)
+  requiredVault: number; // 200% of backingValue
+  ratio: number; // vaultValue / backingValue × 100 (% backed)
+  healthy: boolean; // vaultValue ≥ requiredVault
+}
+
+// Reads the live Vault (₹) and System Core (Gravity) balances and derives the
+// 200% backing health. Single source of truth for the mint guard and the UI.
+export async function getVaultStatus(
+  exec: DbExecutor = db,
+): Promise<VaultStatus> {
+  const rows = await exec
+    .select({
+      accountNumber: matrixAccountsTable.accountNumber,
+      gravityBalance: matrixAccountsTable.gravityBalance,
+    })
+    .from(matrixAccountsTable)
+    .where(inArray(matrixAccountsTable.accountNumber, [VAULT_ACCOUNT, SYSTEM_MAIN]));
+
+  const vaultValue = Number(
+    rows.find((r) => r.accountNumber === VAULT_ACCOUNT)?.gravityBalance ?? 0,
+  );
+  const coreGravity = Number(
+    rows.find((r) => r.accountNumber === SYSTEM_MAIN)?.gravityBalance ?? 0,
+  );
+  const backingValue = coreGravity * GRAVITY_RATE;
+  const requiredVault = backingValue * VAULT_BACKING_RATIO;
+  const ratio =
+    backingValue > 0
+      ? (vaultValue / backingValue) * 100
+      : vaultValue > 0
+        ? Infinity
+        : 100;
+
+  return {
+    vaultValue,
+    coreGravity,
+    backingValue,
+    requiredVault,
+    ratio,
+    healthy: vaultValue >= requiredVault,
+  };
+}
+
+// Sum of all distributed Gravity (pools + citizens), excluding System Core and
+// the Vault. Used to re-anchor System Core to the true circulating supply.
+export async function totalDistributedGravity(
+  exec: DbExecutor = db,
+): Promise<number> {
+  const [row] = await exec
+    .select({
+      total: sql<string>`COALESCE(SUM(${matrixAccountsTable.gravityBalance}), 0)`,
+    })
+    .from(matrixAccountsTable)
+    .where(
+      notInArray(matrixAccountsTable.accountNumber, [SYSTEM_MAIN, VAULT_ACCOUNT]),
+    );
+  return Number(row?.total ?? 0);
+}
+
 export interface MintSplits {
   founder: number;
   reserve: number;
@@ -79,18 +163,18 @@ export interface MintResult {
 }
 
 /**
- * Mints gravity for a verified asset.
+ * Mints gravity, gated by the 200% Vault backing rule.
  *
- * 1. The asset's INR value is deposited into System Core (000000000000) as the
- *    real-world backing for the gravity being minted. System Core therefore
- *    accumulates the total value of every asset backing the money supply.
- * 2. Gravity (value / 10000) is minted and split across the system pools:
- *    Founder 1%, Reserve 24%, Stability 25%, Security 25%, Growth 25%.
- *    The growth share lands in `targetWallet` — the Growth Pool for system
- *    mints, or the asset owner's wallet for user asset deposits.
+ * The Vault (a separate account) holds the real-world ₹ value. System Core holds
+ * the total minted Gravity. Before any gravity is created, the Vault must hold at
+ * least 200% of the resulting System Core gravity value — otherwise the mint is
+ * rejected. Assets are deposited into the Vault separately (see the asset deposit
+ * route); minting here does NOT add backing value, it only issues gravity.
  *
- * Founder always receives exactly 1% as long as `targetWallet` is not the
- * Founder account.
+ * 1. Guard: vaultValue ≥ 200% × (coreGravity + newGravity) × GRAVITY_RATE.
+ * 2. The newly minted gravity is recorded in System Core (the total supply).
+ * 3. It is split across the pools: Founder 1%, Reserve 24%, Stability 25%,
+ *    Security 25%, Growth 25%. The growth share lands in `targetWallet`.
  */
 export async function mintGravity(
   params: {
@@ -102,7 +186,18 @@ export async function mintGravity(
 ): Promise<MintResult> {
   const { inrValue, assetTitle, targetWallet } = params;
 
-  const gravityTotal = inrValue / 10000;
+  const gravityTotal = inrValue / GRAVITY_RATE;
+
+  // Step 0: 200% Vault backing guard. After this mint, the vault must still hold
+  // at least twice the System Core gravity value.
+  const status = await getVaultStatus(exec);
+  const newCoreGravity = status.coreGravity + gravityTotal;
+  const requiredVault = newCoreGravity * GRAVITY_RATE * VAULT_BACKING_RATIO;
+  if (status.vaultValue < requiredVault) {
+    throw new Error(
+      `INSUFFICIENT_VAULT_BACKING: Minting ${gravityTotal.toFixed(2)} G requires the Vault to hold ₹${requiredVault.toFixed(2)} (200% backing), but the Vault holds only ₹${status.vaultValue.toFixed(2)}. Top up the Vault first.`,
+    );
+  }
 
   const founderCut = gravityTotal * 0.01;
   const reserveShare = gravityTotal * 0.24;
@@ -110,18 +205,10 @@ export async function mintGravity(
   const securityShare = gravityTotal * 0.25;
   const growthShare = gravityTotal * 0.25;
 
-  // Step 1: Deposit the backing asset value into System Core (000000000000).
-  await adjustBalance(SYSTEM_MAIN, inrValue.toFixed(6), exec);
-  await logTx(
-    "DEPOSIT",
-    `🏦 [ASSET DEPOSIT] ₹${inrValue.toFixed(2)} — "${assetTitle}" → System Core ${SYSTEM_MAIN}`,
-    undefined,
-    SYSTEM_MAIN,
-    inrValue.toFixed(6),
-    exec,
-  );
+  // Step 1: Record the newly minted gravity in System Core (the total supply).
+  await adjustBalance(SYSTEM_MAIN, gravityTotal.toFixed(6), exec);
 
-  // Step 2: Mint gravity and split it across the system pools.
+  // Step 2: Distribute the minted gravity across the system pools.
   await adjustBalance(FOUNDER_ACCOUNT, founderCut.toFixed(6), exec);
   await adjustBalance(RESERVE_ACCOUNT, reserveShare.toFixed(6), exec);
   await adjustBalance(STABILITY_ACCOUNT, stabilityShare.toFixed(6), exec);
@@ -130,9 +217,9 @@ export async function mintGravity(
 
   await logTx(
     "MINT",
-    `🌌 [MINT] ${gravityTotal.toFixed(2)} Gravity minted for "${assetTitle}"`,
+    `🌌 [MINT] ${gravityTotal.toFixed(2)} Gravity minted for "${assetTitle}" (Vault-backed ≥200%)`,
     undefined,
-    undefined,
+    SYSTEM_MAIN,
     gravityTotal.toFixed(6),
     exec,
   );

@@ -67,7 +67,11 @@ export default function MatrixEngine() {
     (a) => a.accountNumber === user?.accountNumber,
   );
   // Selectable transfer counterparties (exclude the System Core sink).
-  const allWallets = accounts.filter((a) => a.accountNumber !== "000000000000");
+  const allWallets = accounts.filter(
+    (a) =>
+      a.accountNumber !== "000000000000" &&
+      a.accountNumber !== "000000000001",
+  );
 
   // The logged-in user's own transaction history.
   const { data: txData } = useQuery({

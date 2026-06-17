@@ -127,8 +127,10 @@ router.post("/matrix/mint", async (req, res): Promise<void> => {
 
     res.json({ success: true, gravityTotal, splits });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Mint failed";
-    res.status(500).json({ error: msg });
+    const raw = err instanceof Error ? err.message : "Mint failed";
+    const underBacked = raw.startsWith("INSUFFICIENT_VAULT_BACKING");
+    const msg = raw.replace(/^INSUFFICIENT_VAULT_BACKING:\s*/, "");
+    res.status(underBacked ? 400 : 500).json({ error: msg });
   }
 });
 

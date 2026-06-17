@@ -67,6 +67,7 @@ export default App;
 
 const SYSTEM_LABELS: Record<string, string> = {
   "000000000000": "System Core",
+  "000000000001": "Reserve Vault",
   "111111111111": "Founder Core",
   "222222222222": "Reserve Pool",
   "333333333333": "Stability Pool",
@@ -178,18 +179,36 @@ function Home() {
                   {systemAccounts.map((acc: any) => {
                     const isFounder = acc.accountNumber === "111111111111";
                     const isSystem = acc.accountNumber === "000000000000";
+                    const isVault = acc.accountNumber === "000000000001";
+                    const border = isFounder
+                      ? "border-emerald-500/40 bg-emerald-500/5"
+                      : isSystem
+                        ? "border-red-500/30 bg-red-500/5"
+                        : isVault
+                          ? "border-yellow-500/40 bg-yellow-500/5"
+                          : "border-zinc-800 bg-zinc-900/50";
+                    const labelColor = isFounder
+                      ? "text-emerald-400"
+                      : isSystem
+                        ? "text-red-400"
+                        : isVault
+                          ? "text-yellow-400"
+                          : "text-cyan-500";
                     return (
-                      <div key={acc.accountNumber} className={`rounded-lg px-3 py-2 border ${isFounder ? "border-emerald-500/40 bg-emerald-500/5" : isSystem ? "border-red-500/30 bg-red-500/5" : "border-zinc-800 bg-zinc-900/50"}`}>
-                        <div className={`text-[9px] font-mono font-bold tracking-widest ${isFounder ? "text-emerald-400" : isSystem ? "text-red-400" : "text-cyan-500"}`}>
+                      <div key={acc.accountNumber} className={`rounded-lg px-3 py-2 border ${border}`}>
+                        <div className={`text-[9px] font-mono font-bold tracking-widest ${labelColor}`}>
                           {acc.type?.toUpperCase()}
                         </div>
                         <div className="text-white text-xs font-semibold truncate mt-0.5">{SYSTEM_LABELS[acc.accountNumber] ?? acc.name}</div>
                         <div className="text-zinc-500 text-[10px] font-mono">{acc.accountNumber}</div>
                         <div className={`text-sm font-bold font-mono mt-1 ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                          {isSystem ? `₹${fmtG(acc.gravityBalance)}` : `${fmtG(acc.gravityBalance)} G`}
+                          {isVault ? `₹${fmtG(acc.gravityBalance)}` : `${fmtG(acc.gravityBalance)} G`}
                         </div>
                         {isSystem && (
-                          <div className="text-red-400/70 text-[8px] font-mono tracking-widest mt-0.5">ASSET BACKING</div>
+                          <div className="text-red-400/70 text-[8px] font-mono tracking-widest mt-0.5">TOTAL GRAVITY SUPPLY</div>
+                        )}
+                        {isVault && (
+                          <div className="text-yellow-400/70 text-[8px] font-mono tracking-widest mt-0.5">ASSET BACKING · 200%</div>
                         )}
                       </div>
                     );
@@ -306,11 +325,12 @@ function Home() {
               <div className="grid grid-cols-2 gap-1.5">
                 {systemAccounts.map((acc: any) => {
                   const isFounder = acc.accountNumber === "111111111111";
+                  const isVault = acc.accountNumber === "000000000001";
                   return (
-                    <div key={acc.accountNumber} className={`rounded px-2 py-1.5 ${isFounder ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-zinc-800/50"}`}>
+                    <div key={acc.accountNumber} className={`rounded px-2 py-1.5 ${isFounder ? "bg-emerald-500/10 border border-emerald-500/20" : isVault ? "bg-yellow-500/10 border border-yellow-500/20" : "bg-zinc-800/50"}`}>
                       <div className="text-[9px] font-mono text-zinc-500 truncate">{SYSTEM_LABELS[acc.accountNumber]}</div>
                       <div className={`text-xs font-bold font-mono ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                        {fmtG(acc.gravityBalance)} G
+                        {isVault ? `₹${fmtG(acc.gravityBalance)}` : `${fmtG(acc.gravityBalance)} G`}
                       </div>
                     </div>
                   );

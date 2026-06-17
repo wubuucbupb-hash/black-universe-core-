@@ -170,7 +170,7 @@ export default function VaultPage() {
                   <select value={escrowForm.senderAccount} onChange={(e) => setEscrowForm({ ...escrowForm, senderAccount: e.target.value })}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none">
                     <option value="">— Select Sender —</option>
-                    {accounts.filter(a => a.accountNumber !== "000000000000").map(a => (
+                    {accounts.filter(a => a.accountNumber !== "000000000000" && a.accountNumber !== "000000000001").map(a => (
                       <option key={a.accountNumber} value={a.accountNumber}>
                         {a.name} ({a.accountNumber}) [{fmt(a.gravityBalance)} G]
                       </option>
@@ -182,7 +182,7 @@ export default function VaultPage() {
                   <select value={escrowForm.receiverAccount} onChange={(e) => setEscrowForm({ ...escrowForm, receiverAccount: e.target.value })}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none">
                     <option value="">— Select Receiver —</option>
-                    {accounts.filter(a => a.accountNumber !== "000000000000").map(a => (
+                    {accounts.filter(a => a.accountNumber !== "000000000000" && a.accountNumber !== "000000000001").map(a => (
                       <option key={a.accountNumber} value={a.accountNumber}>
                         {a.name} ({a.accountNumber})
                       </option>

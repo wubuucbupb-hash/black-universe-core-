@@ -2,6 +2,7 @@
 - [DB schema drift on deploy](db-schema-drift.md) — schema changes need a DB apply, but `push` wants to DROP the runtime `session` table (logs everyone out); use raw `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for additive cols.
 - [matrix/accounts public contract](matrix-accounts-public-contract.md) — endpoint is public-by-design (Home preview) but must stay PII-stripped; never re-add phone/email or add an auth gate.
 - [Universe Control Space scope](universe-control-space-scope.md) — page = System Accounts + Universe Vault (mint/submit/split) ONLY; admin Asset Registry stays only in admin.tsx (recurring correction).
+- [Vault vs System Core 200% backing](vault-200-backing.md) — Vault 000000000001 holds ₹; Core 000000000000 is gravity odometer; mint gated at vaultValue≥2×core×10000; asset deposit no longer mints; founder must re-anchor PROD.
 - [drizzle-zod must import zod/v4](drizzle-zod-v4-import.md) — schema files using createInsertSchema must import z from "zod/v4"; a plain "zod" import breaks lib declaration emit and cascades fake "no exported member" errors into api-server.
 - [password reset & doc ACL](password-reset-and-doc-acl.md) — reset must stay token-based (never email-only); GET /storage/objects/* must stay session+owner gated before touching storage.
 - [Account-number allocation is gap-fill](account-number-allocation.md) — citizen numbers reuse the lowest free suffix per cluster; cluster_counters is vestigial, never revert to a monotonic counter.

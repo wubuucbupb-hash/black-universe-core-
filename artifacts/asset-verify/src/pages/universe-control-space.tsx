@@ -58,6 +58,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
 
 const SYSTEM_CORES = [
   "000000000000",
+  "000000000001",
   "111111111111",
   "222222222222",
   "333333333333",
@@ -108,6 +109,22 @@ export default function UniverseControlSpace() {
   const systemAccounts = accounts.filter((a) =>
     SYSTEM_CORES.includes(a.accountNumber),
   );
+
+  // ── Vault 200% backing status ───────────────────────────────────────────
+  const coreAcct = accounts.find((a) => a.accountNumber === "000000000000");
+  const vaultAcct = accounts.find((a) => a.accountNumber === "000000000001");
+  const coreGravity = coreAcct ? Number(coreAcct.gravityBalance) : 0;
+  const vaultValue = vaultAcct ? Number(vaultAcct.gravityBalance) : 0;
+  const backingValue = coreGravity * 10000;
+  const requiredVault = backingValue * 2;
+  const vaultRatio =
+    backingValue > 0
+      ? (vaultValue / backingValue) * 100
+      : vaultValue > 0
+        ? Infinity
+        : 100;
+  const vaultHealthy = vaultValue >= requiredVault;
+
   // ── Mint Gravity ────────────────────────────────────────────────────────
   const [mintForm, setMintForm] = useState({
     inrValue: "",
@@ -115,6 +132,10 @@ export default function UniverseControlSpace() {
   });
   const gravityPreview =
     Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
+  // After minting `gravityPreview` G, the vault must still cover 200%.
+  const afterCoreGravity = coreGravity + gravityPreview;
+  const afterRequiredVault = afterCoreGravity * 10000 * 2;
+  const mintAllowed = vaultValue >= afterRequiredVault;
 
   const mintMutation = useMutation({
     mutationFn: (body: object) =>
@@ -157,6 +178,35 @@ export default function UniverseControlSpace() {
       assetTitle: mintForm.assetTitle,
     });
   }
+
+  // ── Vault Control (top-up / re-anchor) ──────────────────────────────────
+  const [vaultForm, setVaultForm] = useState({
+    topup: "",
+    setValue: "",
+    syncCore: false,
+  });
+  const vaultMutation = useMutation({
+    mutationFn: (body: object) =>
+      apiFetch("/api/admin/vault/anchor", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      toast({
+        title: "🏦 Vault Updated",
+        description: "Vault backing has been adjusted.",
+      });
+      setVaultForm({ topup: "", setValue: "", syncCore: false });
+      qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
+      qc.invalidateQueries({ queryKey: ["matrix-logs"] });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Vault Update Failed",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
 
   // ── Submit Asset ────────────────────────────────────────────────────────
   const submit = useSubmitAsset();
@@ -249,6 +299,26 @@ export default function UniverseControlSpace() {
           <h2 className="text-xs font-bold font-mono text-cyan-400 tracking-widest mb-3">
             🔒 SYSTEM ACCOUNTS — GENESIS CORES
           </h2>
+          <div
+            className={`mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border px-3 py-2 text-[11px] font-mono ${
+              vaultHealthy
+                ? "border-emerald-500/30 bg-emerald-500/5"
+                : "border-red-500/40 bg-red-500/5"
+            }`}
+            data-testid="vault-status-banner"
+          >
+            <span className="text-yellow-400">🏦 Vault ₹{fmt(vaultValue)}</span>
+            <span className="text-cyan-400">🌌 Core {fmt(coreGravity)} G</span>
+            <span className="text-zinc-400">
+              🔒 Need ₹{fmt(requiredVault)} (200%)
+            </span>
+            <span
+              className={`font-bold ${vaultHealthy ? "text-emerald-400" : "text-red-400"}`}
+            >
+              {Number.isFinite(vaultRatio) ? `${fmt(vaultRatio)}%` : "∞"}{" "}
+              {vaultHealthy ? "BACKED ✅" : "UNDER-BACKED ⛔"}
+            </span>
+          </div>
           {loadingAccounts ? (
             <div className="text-zinc-500 text-sm font-mono">
               Loading system accounts…
@@ -262,16 +332,21 @@ export default function UniverseControlSpace() {
               {systemAccounts.map((acc) => {
                 const isFounder = acc.accountNumber === "111111111111";
                 const isSystem = acc.accountNumber === "000000000000";
+                const isVault = acc.accountNumber === "000000000001";
                 const border = isFounder
                   ? "border-emerald-500/60"
                   : isSystem
                     ? "border-red-500/60"
-                    : "border-cyan-500/30";
+                    : isVault
+                      ? "border-yellow-500/60"
+                      : "border-cyan-500/30";
                 const typeColor = isFounder
                   ? "text-emerald-400"
                   : isSystem
                     ? "text-red-400"
-                    : "text-cyan-400";
+                    : isVault
+                      ? "text-yellow-400"
+                      : "text-cyan-400";
                 return (
                   <div
                     key={acc.accountNumber}
@@ -290,13 +365,18 @@ export default function UniverseControlSpace() {
                       {acc.accountNumber}
                     </div>
                     <div className="text-green-400 text-sm font-bold font-mono mt-1">
-                      {isSystem
+                      {isVault
                         ? `₹${fmt(acc.gravityBalance)}`
                         : `${fmt(acc.gravityBalance)} G`}
                     </div>
                     {isSystem && (
                       <div className="text-red-400/70 text-[9px] font-mono tracking-widest">
-                        ASSET BACKING
+                        TOTAL GRAVITY SUPPLY
+                      </div>
+                    )}
+                    {isVault && (
+                      <div className="text-yellow-400/70 text-[9px] font-mono tracking-widest">
+                        ASSET BACKING · 200%
                       </div>
                     )}
                   </div>
@@ -317,6 +397,11 @@ export default function UniverseControlSpace() {
               <TabsTrigger value="mint" data-testid="tab-mint">
                 🔥 Mint Gravity
               </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="vault" data-testid="tab-vault">
+                  🏦 Vault
+                </TabsTrigger>
+              )}
               <TabsTrigger value="submit" data-testid="tab-submit">
                 📜 Submit Asset
               </TabsTrigger>
@@ -381,13 +466,11 @@ export default function UniverseControlSpace() {
 
                     <div className="bg-black/50 border border-zinc-800 rounded-md p-3 text-[11px] font-mono space-y-1">
                       <div className="text-zinc-400 mb-1">
-                        Sovereign Split Policy (decided ratios → accounts):
+                        Sovereign Split Policy (minted Gravity → accounts):
                       </div>
                       <div className="text-red-400">
-                        🏦 Asset Value → System Core 000000000000 (backing)
-                        {Number(mintForm.inrValue) > 0
-                          ? `: ₹${fmt(Number(mintForm.inrValue))}`
-                          : ""}
+                        🌌 Total Supply → System Core 000000000000
+                        {gravityPreview > 0 ? `: +${fmt(gravityPreview)} G` : ""}
                       </div>
                       <div className="text-emerald-400">
                         👑 Founder (1%) → 111111111111
@@ -421,16 +504,182 @@ export default function UniverseControlSpace() {
                       </div>
                     </div>
 
+                    {/* Vault 200% backing check */}
+                    <div
+                      className={`rounded-md p-3 text-[11px] font-mono border ${
+                        gravityPreview > 0 && !mintAllowed
+                          ? "border-red-500/40 bg-red-500/5 text-red-300"
+                          : "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
+                      }`}
+                      data-testid="mint-vault-check"
+                    >
+                      <div>🏦 Vault backing held: ₹{fmt(vaultValue)}</div>
+                      <div>
+                        🔒 Required after mint (200%): ₹{fmt(afterRequiredVault)}
+                      </div>
+                      {gravityPreview > 0 && (
+                        <div className="mt-1 font-bold">
+                          {mintAllowed
+                            ? "✅ Vault sufficient — mint allowed"
+                            : `⛔ Under-backed by ₹${fmt(Math.max(0, afterRequiredVault - vaultValue))} — top up the Vault first`}
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       onClick={handleMint}
-                      disabled={mintMutation.isPending}
-                      className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-400 hover:from-cyan-500 hover:to-cyan-300 disabled:opacity-50 text-black font-extrabold rounded-md transition-all text-sm tracking-wide"
+                      disabled={
+                        mintMutation.isPending ||
+                        (gravityPreview > 0 && !mintAllowed)
+                      }
+                      className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-400 hover:from-cyan-500 hover:to-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-black font-extrabold rounded-md transition-all text-sm tracking-wide"
                       data-testid="button-execute-mint"
                     >
                       {mintMutation.isPending
                         ? "⏳ EXECUTING…"
                         : "🔥 EXECUTE GRAVITY MINT & SPLIT PIPELINE"}
                     </button>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Vault Control */}
+            <TabsContent value="vault">
+              <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
+                {!isAdmin ? (
+                  <div className="flex items-start gap-3 p-4 border border-yellow-500/30 rounded-md bg-yellow-500/5 text-yellow-400 text-sm font-mono">
+                    <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      FOUNDER ROOT ACCESS REQUIRED — Vault control is locked to
+                      the founder console.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Live status */}
+                    <div className="grid grid-cols-2 gap-3 text-[11px] font-mono">
+                      <div className="border border-zinc-800 rounded-md p-3 bg-black/40">
+                        <div className="text-zinc-500">VAULT VALUE (₹)</div>
+                        <div className="text-yellow-400 text-base font-bold">
+                          ₹{fmt(vaultValue)}
+                        </div>
+                      </div>
+                      <div className="border border-zinc-800 rounded-md p-3 bg-black/40">
+                        <div className="text-zinc-500">SYSTEM CORE GRAVITY</div>
+                        <div className="text-cyan-400 text-base font-bold">
+                          {fmt(coreGravity)} G
+                        </div>
+                      </div>
+                      <div className="border border-zinc-800 rounded-md p-3 bg-black/40">
+                        <div className="text-zinc-500">REQUIRED (200%)</div>
+                        <div className="text-white text-base font-bold">
+                          ₹{fmt(requiredVault)}
+                        </div>
+                      </div>
+                      <div
+                        className={`border rounded-md p-3 ${vaultHealthy ? "border-emerald-500/40 bg-emerald-500/5" : "border-red-500/40 bg-red-500/5"}`}
+                      >
+                        <div className="text-zinc-500">BACKING RATIO</div>
+                        <div
+                          className={`text-base font-bold ${vaultHealthy ? "text-emerald-400" : "text-red-400"}`}
+                        >
+                          {Number.isFinite(vaultRatio)
+                            ? `${fmt(vaultRatio)}%`
+                            : "∞"}{" "}
+                          {vaultHealthy ? "✅" : "⛔"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top up */}
+                    <div className="border border-zinc-800 rounded-md p-3 space-y-2">
+                      <label className="text-zinc-400 text-xs font-mono">
+                        Top up Vault (add ₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        placeholder="e.g., 5000000"
+                        value={vaultForm.topup}
+                        onChange={(e) =>
+                          setVaultForm({ ...vaultForm, topup: e.target.value })
+                        }
+                        className="w-full bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                        data-testid="input-vault-topup"
+                      />
+                      <button
+                        onClick={() =>
+                          vaultMutation.mutate({ vaultTopup: vaultForm.topup })
+                        }
+                        disabled={
+                          vaultMutation.isPending ||
+                          !vaultForm.topup ||
+                          Number(vaultForm.topup) <= 0
+                        }
+                        className="w-full py-2 bg-yellow-500/90 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-md text-sm"
+                        data-testid="button-vault-topup"
+                      >
+                        🏦 Add to Vault
+                      </button>
+                    </div>
+
+                    {/* Re-anchor */}
+                    <div className="border border-zinc-800 rounded-md p-3 space-y-2">
+                      <label className="text-zinc-400 text-xs font-mono">
+                        Re-anchor Vault (set absolute ₹ value)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10000"
+                        placeholder="e.g., 20240000"
+                        value={vaultForm.setValue}
+                        onChange={(e) =>
+                          setVaultForm({
+                            ...vaultForm,
+                            setValue: e.target.value,
+                          })
+                        }
+                        className="w-full bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                        data-testid="input-vault-setvalue"
+                      />
+                      <label className="flex items-center gap-2 text-zinc-400 text-xs font-mono">
+                        <input
+                          type="checkbox"
+                          checked={vaultForm.syncCore}
+                          onChange={(e) =>
+                            setVaultForm({
+                              ...vaultForm,
+                              syncCore: e.target.checked,
+                            })
+                          }
+                          data-testid="checkbox-sync-core"
+                        />
+                        Also re-anchor System Core gravity to circulating supply
+                      </label>
+                      <button
+                        onClick={() =>
+                          vaultMutation.mutate({
+                            vaultValue: vaultForm.setValue,
+                            reAnchorCore: vaultForm.syncCore,
+                          })
+                        }
+                        disabled={
+                          vaultMutation.isPending ||
+                          (vaultForm.setValue === "" && !vaultForm.syncCore)
+                        }
+                        className="w-full py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-md text-sm"
+                        data-testid="button-vault-reanchor"
+                      >
+                        ⚓ Re-anchor Vault
+                      </button>
+                      <p className="text-zinc-600 text-[10px] font-mono">
+                        Migration: set the Vault to ≥200% of the gravity value,
+                        and tick the box to sync System Core to the live supply.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
