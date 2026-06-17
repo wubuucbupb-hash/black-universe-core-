@@ -8,8 +8,10 @@ import {
   matrixAccountsTable,
   matrixTransactionsTable,
   passwordResetTokensTable,
+  gravityPurchaseRequestsTable,
+  gatewaySettingsTable,
 } from "@workspace/db";
-import { eq, sql, and, isNull } from "drizzle-orm";
+import { eq, sql, and, isNull, desc } from "drizzle-orm";
 import {
   AdminListAssetsQueryParams,
   RejectAssetBody,
@@ -20,6 +22,7 @@ import {
   logTx,
   VAULT_ACCOUNT,
   GRAVITY_RATE,
+  RESERVE_ACCOUNT,
 } from "../lib/matrixEngine";
 import { encrypt } from "../lib/encryption";
 
@@ -406,6 +409,7 @@ router.get("/admin/accounts", async (req, res): Promise<void> => {
       type: matrixAccountsTable.type,
       cluster: matrixAccountsTable.cluster,
       gravityBalance: matrixAccountsTable.gravityBalance,
+      equityUnits: matrixAccountsTable.equityUnits,
       createdAt: matrixAccountsTable.createdAt,
       archivedAt: matrixAccountsTable.archivedAt,
     })
@@ -800,5 +804,179 @@ router.post(
 // supplying only an email + new password (account takeover). Password resets now
 // go through the token-based flow in `users.ts`
 // (POST /users/forgot-password -> POST /users/reset-password).
+
+// ── GET /api/admin/gravity-purchases ───────────────────────────────────────
+// All INR → Gravity requests with the requesting citizen's identity.
+router.get("/admin/gravity-purchases", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const rows = await db
+    .select({
+      id: gravityPurchaseRequestsTable.id,
+      userId: gravityPurchaseRequestsTable.userId,
+      inrAmount: gravityPurchaseRequestsTable.inrAmount,
+      gravityAmount: gravityPurchaseRequestsTable.gravityAmount,
+      proofUrls: gravityPurchaseRequestsTable.proofUrls,
+      reference: gravityPurchaseRequestsTable.reference,
+      status: gravityPurchaseRequestsTable.status,
+      rejectionReason: gravityPurchaseRequestsTable.rejectionReason,
+      reviewedAt: gravityPurchaseRequestsTable.reviewedAt,
+      createdAt: gravityPurchaseRequestsTable.createdAt,
+      userName: usersTable.name,
+      userEmail: usersTable.email,
+      accountNumber: usersTable.accountNumber,
+    })
+    .from(gravityPurchaseRequestsTable)
+    .leftJoin(usersTable, eq(usersTable.id, gravityPurchaseRequestsTable.userId))
+    .orderBy(desc(gravityPurchaseRequestsTable.createdAt));
+
+  res.json({ requests: rows });
+});
+
+// ── POST /api/admin/gravity-purchases/:id/approve ──────────────────────────
+// Verify payment proof, then credit Gravity to the buyer from the Reserve pool
+// (conserves total supply). The request must still be pending.
+router.post(
+  "/admin/gravity-purchases/:id/approve",
+  async (req, res): Promise<void> => {
+    if (!(await requireAdmin(req, res))) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid request id" });
+      return;
+    }
+
+    try {
+      const result = await db.transaction(async (tx) => {
+        const [request] = await tx
+          .select()
+          .from(gravityPurchaseRequestsTable)
+          .where(eq(gravityPurchaseRequestsTable.id, id))
+          .limit(1);
+        if (!request) throw new Error("NOT_FOUND");
+        if (request.status !== "pending") throw new Error("ALREADY_PROCESSED");
+
+        const [user] = await tx
+          .select()
+          .from(usersTable)
+          .where(eq(usersTable.id, request.userId))
+          .limit(1);
+        if (!user) throw new Error("USER_NOT_FOUND");
+
+        const accountNumber = await ensureUserMatrixAccount(user, tx);
+        const gravity = Number(request.gravityAmount);
+
+        const [reserve] = await tx
+          .select()
+          .from(matrixAccountsTable)
+          .where(eq(matrixAccountsTable.accountNumber, RESERVE_ACCOUNT))
+          .limit(1);
+        if (!reserve || Number(reserve.gravityBalance) < gravity) {
+          throw new Error("INSUFFICIENT_RESERVE");
+        }
+
+        await adjustBalance(RESERVE_ACCOUNT, (-gravity).toFixed(6), tx);
+        await adjustBalance(accountNumber, gravity.toFixed(6), tx);
+        await logTx(
+          "GRAVITY_PURCHASE",
+          `💰 [GATEWAY] ₹${Number(request.inrAmount).toFixed(2)} → ${gravity.toFixed(6)} Gravity credited to ${accountNumber} (admin-approved)`,
+          RESERVE_ACCOUNT,
+          accountNumber,
+          gravity.toFixed(6),
+          tx,
+        );
+
+        const [updated] = await tx
+          .update(gravityPurchaseRequestsTable)
+          .set({ status: "approved", reviewedAt: new Date() })
+          .where(eq(gravityPurchaseRequestsTable.id, id))
+          .returning();
+        return updated;
+      });
+
+      res.json({ success: true, request: result });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Approval failed";
+      if (msg === "NOT_FOUND") {
+        res.status(404).json({ error: "Request not found" });
+      } else if (msg === "USER_NOT_FOUND") {
+        res.status(404).json({ error: "Requesting user not found" });
+      } else if (msg === "ALREADY_PROCESSED") {
+        res
+          .status(400)
+          .json({ error: "This request has already been processed" });
+      } else if (msg === "INSUFFICIENT_RESERVE") {
+        res.status(400).json({
+          error:
+            "Reserve pool has insufficient Gravity. Top up the Reserve pool, then approve.",
+        });
+      } else {
+        res.status(500).json({ error: msg });
+      }
+    }
+  },
+);
+
+// ── POST /api/admin/gravity-purchases/:id/reject ───────────────────────────
+router.post(
+  "/admin/gravity-purchases/:id/reject",
+  async (req, res): Promise<void> => {
+    if (!(await requireAdmin(req, res))) return;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid request id" });
+      return;
+    }
+    const reason: string | undefined = req.body?.reason;
+
+    const [updated] = await db
+      .update(gravityPurchaseRequestsTable)
+      .set({
+        status: "rejected",
+        rejectionReason: reason?.trim() || null,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(gravityPurchaseRequestsTable.id, id),
+          eq(gravityPurchaseRequestsTable.status, "pending"),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      res
+        .status(400)
+        .json({ error: "Request not found or already processed" });
+      return;
+    }
+    res.json({ success: true, request: updated });
+  },
+);
+
+// ── PUT /api/admin/gateway-settings ────────────────────────────────────────
+// Set the bank / UPI details citizens pay INR to. Single-row (id = 1) config.
+router.put("/admin/gateway-settings", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const body = req.body ?? {};
+  const values = {
+    bankName: (body.bankName as string)?.trim() || null,
+    accountName: (body.accountName as string)?.trim() || null,
+    accountNumber: (body.accountNumber as string)?.trim() || null,
+    ifsc: (body.ifsc as string)?.trim() || null,
+    upiId: (body.upiId as string)?.trim() || null,
+    instructions: (body.instructions as string)?.trim() || null,
+    updatedAt: new Date(),
+  };
+
+  const [settings] = await db
+    .insert(gatewaySettingsTable)
+    .values({ id: 1, ...values })
+    .onConflictDoUpdate({ target: gatewaySettingsTable.id, set: values })
+    .returning();
+
+  res.json({ success: true, settings });
+});
 
 export default router;

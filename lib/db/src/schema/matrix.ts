@@ -15,6 +15,9 @@ export const matrixAccountsTable = pgTable("matrix_accounts", {
   gravityBalance: numeric("gravity_balance", { precision: 30, scale: 6 })
     .notNull()
     .default("0"),
+  equityUnits: numeric("equity_units", { precision: 30, scale: 6 })
+    .notNull()
+    .default("0"),
   nationalIdHash: text("national_id_hash"),
   phone: text("phone"),
   email: text("email"),

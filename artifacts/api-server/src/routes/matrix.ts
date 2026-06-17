@@ -1,11 +1,23 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { assetsTable, db, matrixAccountsTable, matrixTransactionsTable, usersTable } from "@workspace/db";
+import {
+  assetsTable,
+  db,
+  matrixAccountsTable,
+  matrixTransactionsTable,
+  usersTable,
+  gravityPurchaseRequestsTable,
+  gatewaySettingsTable,
+} from "@workspace/db";
 import { eq, desc, isNull, or } from "drizzle-orm";
 import {
   FOUNDER_ACCOUNT,
   GROWTH_ACCOUNT,
+  GRAVITY_RATE,
+  EQUITY_PRICE_GRAVITY,
   adjustBalance,
+  adjustEquity,
+  ensureUserMatrixAccount,
   logTx,
   mintGravity,
 } from "../lib/matrixEngine";
@@ -62,6 +74,7 @@ router.get("/matrix/accounts", async (_req, res): Promise<void> => {
       type: matrixAccountsTable.type,
       cluster: matrixAccountsTable.cluster,
       gravityBalance: matrixAccountsTable.gravityBalance,
+      equityUnits: matrixAccountsTable.equityUnits,
       createdAt: matrixAccountsTable.createdAt,
     })
     .from(matrixAccountsTable)
@@ -255,5 +268,149 @@ router.post("/matrix/transfer", async (req, res): Promise<void> => {
     res.status(500).json({ error: msg });
   }
 });
+
+// ── POST /api/matrix/equity/buy ────────────────────────────────────────────
+// Spend Gravity to buy Black Universe Equity units (EQUITY_PRICE_GRAVITY G = 1
+// unit). The spent Gravity is routed into the Growth pool, so total Gravity is
+// conserved; the buyer's equityUnits go up.
+router.post("/matrix/equity/buy", async (req, res): Promise<void> => {
+  const user = await getAuthUser(req, res);
+  if (!user) return;
+
+  try {
+    const gravityAmount = Number(req.body?.gravityAmount);
+    if (!gravityAmount || gravityAmount <= 0) {
+      res.status(400).json({ error: "A positive Gravity amount is required" });
+      return;
+    }
+
+    const accountNumber = await ensureUserMatrixAccount(user);
+
+    const [account] = await db
+      .select()
+      .from(matrixAccountsTable)
+      .where(eq(matrixAccountsTable.accountNumber, accountNumber))
+      .limit(1);
+
+    if (!account) {
+      res.status(404).json({ error: "Your wallet was not found" });
+      return;
+    }
+
+    if (Number(account.gravityBalance) < gravityAmount) {
+      res.status(400).json({ error: "Insufficient Gravity balance" });
+      return;
+    }
+
+    const equityUnits = gravityAmount / EQUITY_PRICE_GRAVITY;
+
+    await db.transaction(async (tx) => {
+      await adjustBalance(accountNumber, (-gravityAmount).toFixed(6), tx);
+      await adjustBalance(GROWTH_ACCOUNT, gravityAmount.toFixed(6), tx);
+      await adjustEquity(accountNumber, equityUnits.toFixed(6), tx);
+      await logTx(
+        "EQUITY_BUY",
+        `📜 [EQUITY] ${account.name} bought ${equityUnits.toFixed(6)} BU Equity for ${gravityAmount.toFixed(2)} Gravity (${EQUITY_PRICE_GRAVITY} G/unit)`,
+        accountNumber,
+        GROWTH_ACCOUNT,
+        gravityAmount.toFixed(6),
+        tx,
+      );
+    });
+
+    res.json({
+      success: true,
+      gravitySpent: gravityAmount,
+      equityUnits,
+      pricePerUnit: EQUITY_PRICE_GRAVITY,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Equity purchase failed";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ── GET /api/matrix/gateway-settings ───────────────────────────────────────
+// Bank / UPI details a citizen pays INR to before submitting a Gravity purchase
+// request. Available to any logged-in user.
+router.get("/matrix/gateway-settings", async (req, res): Promise<void> => {
+  const user = await getAuthUser(req, res);
+  if (!user) return;
+  const [settings] = await db
+    .select()
+    .from(gatewaySettingsTable)
+    .where(eq(gatewaySettingsTable.id, 1))
+    .limit(1);
+  res.json({ settings: settings ?? null });
+});
+
+// ── POST /api/matrix/gravity-purchase ──────────────────────────────────────
+// Citizen submits an INR → Gravity request after paying to the bank/UPI. They
+// attach payment proof; an admin verifies and approves it to credit Gravity.
+router.post("/matrix/gravity-purchase", async (req, res): Promise<void> => {
+  const user = await getAuthUser(req, res);
+  if (!user) return;
+
+  try {
+    const inrAmount = Number(req.body?.inrAmount);
+    const reference: string | undefined = req.body?.reference;
+    const proofUrls: unknown = req.body?.proofUrls;
+
+    if (!inrAmount || inrAmount <= 0) {
+      res.status(400).json({ error: "A positive INR amount is required" });
+      return;
+    }
+    if (
+      !Array.isArray(proofUrls) ||
+      proofUrls.length === 0 ||
+      !proofUrls.every((p) => typeof p === "string")
+    ) {
+      res
+        .status(400)
+        .json({ error: "At least one payment proof document is required" });
+      return;
+    }
+
+    // Make sure the buyer has a wallet ready to receive Gravity on approval.
+    await ensureUserMatrixAccount(user);
+
+    const gravityAmount = inrAmount / GRAVITY_RATE;
+
+    const [request] = await db
+      .insert(gravityPurchaseRequestsTable)
+      .values({
+        userId: user.id,
+        inrAmount: inrAmount.toFixed(2),
+        gravityAmount: gravityAmount.toFixed(6),
+        proofUrls: proofUrls as string[],
+        reference: reference?.trim() || null,
+        status: "pending",
+      })
+      .returning();
+
+    res.json({ success: true, request });
+  } catch (err: unknown) {
+    const msg =
+      err instanceof Error ? err.message : "Gravity purchase request failed";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ── GET /api/matrix/my-gravity-purchases ───────────────────────────────────
+// The logged-in citizen's own INR → Gravity requests and their statuses.
+router.get(
+  "/matrix/my-gravity-purchases",
+  async (req, res): Promise<void> => {
+    const user = await getAuthUser(req, res);
+    if (!user) return;
+    const requests = await db
+      .select()
+      .from(gravityPurchaseRequestsTable)
+      .where(eq(gravityPurchaseRequestsTable.userId, user.id))
+      .orderBy(desc(gravityPurchaseRequestsTable.createdAt))
+      .limit(50);
+    res.json({ requests });
+  },
+);
 
 export default router;

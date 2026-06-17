@@ -279,6 +279,148 @@ export default function MatrixEngine() {
     transferMutation.mutate(body);
   }
 
+  // ── Black Universe Equity (Gravity → Equity) ────────────────────────────────
+  const EQUITY_PRICE_GRAVITY = 100; // display mirror of the server constant
+  const [equityGravity, setEquityGravity] = useState("");
+  const myEquity = myAccount ? Number(myAccount.equityUnits ?? 0) : 0;
+  const equityPreview =
+    Number(equityGravity) > 0 ? Number(equityGravity) / EQUITY_PRICE_GRAVITY : 0;
+
+  const equityMutation = useMutation({
+    mutationFn: (gravityAmount: string) =>
+      apiFetch("/api/matrix/equity/buy", {
+        method: "POST",
+        body: JSON.stringify({ gravityAmount }),
+      }),
+    onSuccess: (data) => {
+      toast({
+        title: "📜 Equity Acquired!",
+        description: `+${fmt(data.equityUnits)} BU Equity for ${fmt(data.gravitySpent)} Gravity`,
+      });
+      setEquityGravity("");
+      qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
+      qc.invalidateQueries({ queryKey: ["my-transactions"] });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Equity Purchase Failed",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+
+  function handleBuyEquity() {
+    const g = Number(equityGravity);
+    if (!g || g <= 0) {
+      toast({
+        title: "Missing Amount",
+        description: "Enter how much Gravity to spend",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (myAccount && g > Number(myAccount.gravityBalance)) {
+      toast({
+        title: "Insufficient Gravity",
+        description: "You don't have that much Gravity",
+        variant: "destructive",
+      });
+      return;
+    }
+    equityMutation.mutate(equityGravity);
+  }
+
+  // ── INR → Gravity Gateway ───────────────────────────────────────────────────
+  const { data: gatewayData } = useQuery({
+    queryKey: ["gateway-settings"],
+    queryFn: () => apiFetch("/api/matrix/gateway-settings"),
+    enabled: !!user,
+  });
+  const gateway = gatewayData?.settings ?? null;
+
+  const { data: myPurchasesData } = useQuery({
+    queryKey: ["my-gravity-purchases"],
+    queryFn: () => apiFetch("/api/matrix/my-gravity-purchases"),
+    enabled: !!user,
+    refetchInterval: 8000,
+  });
+  const myPurchases: any[] = myPurchasesData?.requests ?? [];
+
+  const [buyInr, setBuyInr] = useState("");
+  const [buyRef, setBuyRef] = useState("");
+  const buyGravityPreview =
+    Number(buyInr) > 0 ? Number(buyInr) / GRAVITY_RATE : 0;
+
+  const [proofDocs, setProofDocs] = useState<UploadedDoc[]>([]);
+  const proofPathsRef = useRef<Map<string, UploadedDoc>>(new Map());
+  const handleProofComplete = (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>,
+  ) => {
+    const newDocs: UploadedDoc[] = [];
+    for (const file of result.successful ?? []) {
+      const stored = proofPathsRef.current.get(file.id);
+      if (stored) newDocs.push(stored);
+    }
+    setProofDocs((prev) => [...prev, ...newDocs]);
+    if (newDocs.length > 0) {
+      toast({
+        title: "Proof Uploaded",
+        description: `${newDocs.length} file(s) attached.`,
+      });
+    }
+  };
+  const removeProof = (objectPath: string) =>
+    setProofDocs((prev) => prev.filter((d) => d.objectPath !== objectPath));
+
+  const purchaseMutation = useMutation({
+    mutationFn: (body: object) =>
+      apiFetch("/api/matrix/gravity-purchase", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      toast({
+        title: "✅ Request Submitted",
+        description: "Admin will verify your payment and credit Gravity.",
+      });
+      setBuyInr("");
+      setBuyRef("");
+      setProofDocs([]);
+      proofPathsRef.current.clear();
+      qc.invalidateQueries({ queryKey: ["my-gravity-purchases"] });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Request Failed",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+
+  function handleBuyGravity() {
+    if (!buyInr || Number(buyInr) <= 0) {
+      toast({
+        title: "Missing Amount",
+        description: "Enter the INR amount you paid",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (proofDocs.length === 0) {
+      toast({
+        title: "Proof Required",
+        description: "Upload your payment screenshot / receipt",
+        variant: "destructive",
+      });
+      return;
+    }
+    purchaseMutation.mutate({
+      inrAmount: buyInr,
+      reference: buyRef,
+      proofUrls: proofDocs.map((d) => d.objectPath),
+    });
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
@@ -665,6 +807,260 @@ export default function MatrixEngine() {
                     ? "⏳ PROCESSING..."
                     : "🛡️ EXECUTE SECURE TRANSFER"}
                 </button>
+              </div>
+            )}
+          </div>
+
+          {/* Buy Black Universe Equity */}
+          <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
+            <h2 className="text-sm font-bold font-mono text-cyan-400 mb-1 tracking-widest">
+              📜 BLACK UNIVERSE EQUITY
+            </h2>
+            <p className="text-zinc-600 text-[11px] font-mono mb-4">
+              Convert Gravity into Black Universe Equity.{" "}
+              {EQUITY_PRICE_GRAVITY} Gravity = 1 Equity unit.
+            </p>
+            {!user ? (
+              <div className="p-3 border border-zinc-700 rounded-md text-zinc-500 text-sm font-mono">
+                Login required to buy equity
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="bg-black border border-zinc-800 rounded-md px-3 py-2 flex items-center justify-between">
+                  <span className="text-zinc-500 text-xs font-mono">
+                    Your Equity
+                  </span>
+                  <span className="text-cyan-400 font-bold font-mono">
+                    {fmt(myEquity)} units
+                  </span>
+                </div>
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    Gravity to Spend
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    placeholder="0.0000"
+                    value={equityGravity}
+                    onChange={(e) => setEquityGravity(e.target.value)}
+                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                  <p className="text-zinc-500 text-[11px] mt-1 font-mono">
+                    {myAccount ? (
+                      <>Available: {fmt(myAccount.gravityBalance)} G · </>
+                    ) : null}
+                    {equityPreview > 0 && (
+                      <>You receive ≈ {fmt(equityPreview)} Equity units</>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={handleBuyEquity}
+                  disabled={equityMutation.isPending || !myAccount}
+                  className="w-full py-3 bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 disabled:opacity-50 text-black font-extrabold rounded-md transition-all text-sm tracking-wide"
+                >
+                  {equityMutation.isPending ? "⏳ PROCESSING..." : "📜 BUY EQUITY"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Buy Gravity — INR Gateway */}
+          <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
+            <h2 className="text-sm font-bold font-mono text-cyan-400 mb-1 tracking-widest">
+              💰 BUY GRAVITY · INR GATEWAY
+            </h2>
+            <p className="text-zinc-600 text-[11px] font-mono mb-4">
+              Pay INR to the account below, upload proof, and submit. Admin
+              verifies &amp; credits Gravity at ₹
+              {GRAVITY_RATE.toLocaleString("en-IN")} = 1 G.
+            </p>
+            {!user ? (
+              <div className="p-3 border border-zinc-700 rounded-md text-zinc-500 text-sm font-mono">
+                Login required to buy Gravity
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="bg-black border border-zinc-800 rounded-md p-3 space-y-1 text-xs font-mono">
+                  <div className="text-zinc-500 mb-1 tracking-widest">PAY TO</div>
+                  {gateway && (gateway.accountNumber || gateway.upiId) ? (
+                    <>
+                      {gateway.bankName && (
+                        <div className="text-zinc-300">🏦 {gateway.bankName}</div>
+                      )}
+                      {gateway.accountName && (
+                        <div className="text-zinc-300">
+                          👤 {gateway.accountName}
+                        </div>
+                      )}
+                      {gateway.accountNumber && (
+                        <div className="text-zinc-300">
+                          #️⃣ A/C {gateway.accountNumber}
+                        </div>
+                      )}
+                      {gateway.ifsc && (
+                        <div className="text-zinc-300">🔤 IFSC {gateway.ifsc}</div>
+                      )}
+                      {gateway.upiId && (
+                        <div className="text-cyan-400">📲 UPI {gateway.upiId}</div>
+                      )}
+                      {gateway.instructions && (
+                        <div className="text-zinc-500 mt-1">
+                          {gateway.instructions}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-zinc-600">
+                      Bank details not configured yet. Please contact admin.
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    INR Paid (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    value={buyInr}
+                    onChange={(e) => setBuyInr(e.target.value)}
+                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                  <p className="text-zinc-500 text-[11px] mt-1 font-mono">
+                    {buyGravityPreview > 0 && (
+                      <>You get ≈ {fmt(buyGravityPreview)} Gravity</>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    Payment Reference / UTR (optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="UTR / txn id"
+                    value={buyRef}
+                    onChange={(e) => setBuyRef(e.target.value)}
+                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-zinc-400 text-xs font-mono">
+                    Payment Proof <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-zinc-600 text-[11px] font-mono mt-1 mb-2">
+                    Screenshot / receipt of your INR payment (image / PDF, max 10
+                    MB).
+                  </p>
+                  <ObjectUploader
+                    maxNumberOfFiles={3}
+                    maxFileSize={10 * 1024 * 1024}
+                    onGetUploadParameters={async (file) => {
+                      const res = await fetch(
+                        "/api/storage/uploads/request-url",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({
+                            name: file.name,
+                            size: file.size,
+                            contentType: file.type,
+                          }),
+                        },
+                      );
+                      const { uploadURL, objectPath } = await res.json();
+                      proofPathsRef.current.set(file.id, {
+                        name: file.name,
+                        objectPath,
+                      });
+                      return {
+                        method: "PUT" as const,
+                        url: uploadURL,
+                        headers: { "Content-Type": file.type },
+                      };
+                    }}
+                    onComplete={handleProofComplete}
+                    buttonClassName="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-zinc-700 bg-black hover:bg-zinc-900 text-sm font-medium text-zinc-300 transition-colors w-full justify-center"
+                  >
+                    <FileText className="h-4 w-4" /> Upload Payment Proof
+                  </ObjectUploader>
+                  {proofDocs.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      <p className="text-sm font-medium text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4" /> {proofDocs.length}{" "}
+                        file(s) attached
+                      </p>
+                      {proofDocs.map((doc) => (
+                        <div
+                          key={doc.objectPath}
+                          className="flex items-center justify-between bg-black border border-zinc-800 rounded px-3 py-2 text-sm"
+                        >
+                          <div className="flex items-center gap-2 text-zinc-400 truncate">
+                            <FileText className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">{doc.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeProof(doc.objectPath)}
+                            className="ml-2 text-zinc-500 hover:text-red-400 flex-shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleBuyGravity}
+                  disabled={purchaseMutation.isPending}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-cyan-500 hover:from-emerald-500 hover:to-cyan-400 disabled:opacity-50 text-black font-extrabold rounded-md transition-all text-sm tracking-wide"
+                >
+                  {purchaseMutation.isPending
+                    ? "⏳ SUBMITTING..."
+                    : "💰 SUBMIT GRAVITY PURCHASE"}
+                </button>
+
+                {myPurchases.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <div className="text-zinc-500 text-[11px] font-mono tracking-widest">
+                      MY REQUESTS
+                    </div>
+                    {myPurchases.map((p) => (
+                      <div
+                        key={p.id}
+                        className="bg-black border border-zinc-800 rounded px-3 py-2 text-xs font-mono flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="text-zinc-300">
+                            ₹{fmt(p.inrAmount)} → {fmt(p.gravityAmount)} G
+                          </div>
+                          <div className="text-zinc-600 text-[10px]">
+                            {fmtDate(p.createdAt)}
+                            {p.rejectionReason ? ` · ${p.rejectionReason}` : ""}
+                          </div>
+                        </div>
+                        <span
+                          className={
+                            p.status === "approved"
+                              ? "text-emerald-400 font-bold"
+                              : p.status === "rejected"
+                                ? "text-red-400 font-bold"
+                                : "text-yellow-400 font-bold"
+                          }
+                        >
+                          {p.status.toUpperCase()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

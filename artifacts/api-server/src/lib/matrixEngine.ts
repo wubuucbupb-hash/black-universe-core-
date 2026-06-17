@@ -27,6 +27,9 @@ export const VAULT_ACCOUNT = "000000000001";
 export const GRAVITY_RATE = 10000;
 // Required over-collateralization: vault value must be ≥ 200% of gravity value.
 export const VAULT_BACKING_RATIO = 2;
+// Black Universe Equity price: how many Gravity buys ONE BU Equity unit.
+// Change this single constant to re-price equity.
+export const EQUITY_PRICE_GRAVITY = 100;
 
 // Network cluster layers a citizen can join at registration. The chosen digit
 // becomes the account-number prefix; cluster 7 (Citizen) is the default.
@@ -70,6 +73,20 @@ export async function adjustBalance(
     .update(matrixAccountsTable)
     .set({
       gravityBalance: sql`${matrixAccountsTable.gravityBalance} + ${delta}`,
+    })
+    .where(eq(matrixAccountsTable.accountNumber, accountNumber));
+}
+
+// Adjusts an account's Black Universe Equity holdings by `delta` (signed).
+export async function adjustEquity(
+  accountNumber: string,
+  delta: string,
+  exec: DbExecutor = db,
+): Promise<void> {
+  await exec
+    .update(matrixAccountsTable)
+    .set({
+      equityUnits: sql`${matrixAccountsTable.equityUnits} + ${delta}`,
     })
     .where(eq(matrixAccountsTable.accountNumber, accountNumber));
 }

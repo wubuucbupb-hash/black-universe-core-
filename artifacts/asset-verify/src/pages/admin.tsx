@@ -13,6 +13,7 @@ import {
   getAdminListUsersQueryKey,
 } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { GRAVITY_RATE } from "@/lib/currency";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +46,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const VALID_TABS = ["matrix", "custody", "txns", "assets", "users"];
+const VALID_TABS = ["matrix", "custody", "txns", "assets", "users", "gateway"];
 function tabFromHash(): string {
   const h = window.location.hash.replace(/^#/, "");
   return VALID_TABS.includes(h) ? h : "matrix";
@@ -59,6 +60,17 @@ export default function Admin() {
 
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [gwRejectId, setGwRejectId] = useState<number | null>(null);
+  const [gwRejectReason, setGwRejectReason] = useState("");
+  const [gwForm, setGwForm] = useState({
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    ifsc: "",
+    upiId: "",
+    instructions: "",
+  });
+  const [gwSaving, setGwSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(tabFromHash);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{
@@ -147,6 +159,45 @@ export default function Admin() {
     refetchInterval: 6000,
   });
 
+  const { data: gravityRequests } = useQuery({
+    queryKey: ["admin-gravity-purchases"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/admin/gravity-purchases`, {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: user?.role === "admin",
+    refetchInterval: 6000,
+  });
+
+  const { data: gatewaySettingsData } = useQuery({
+    queryKey: ["admin-gateway-settings"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/matrix/gateway-settings`, {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: user?.role === "admin",
+  });
+
+  useEffect(() => {
+    const s = gatewaySettingsData?.settings;
+    if (s) {
+      setGwForm({
+        bankName: s.bankName ?? "",
+        accountName: s.accountName ?? "",
+        accountNumber: s.accountNumber ?? "",
+        ifsc: s.ifsc ?? "",
+        upiId: s.upiId ?? "",
+        instructions: s.instructions ?? "",
+      });
+    }
+  }, [gatewaySettingsData]);
+
   function fmtG(n: number | string) {
     return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
@@ -155,6 +206,7 @@ export default function Admin() {
   const allAccounts: any[] = matrixAccounts?.accounts ?? [];
   const custodyEntries: any[] = custodyData?.entries ?? [];
   const txnLogs: any[] = matrixTxns?.logs ?? [];
+  const gravityReqs: any[] = gravityRequests?.requests ?? [];
 
   if (isAuthLoading) return null;
 
@@ -366,6 +418,102 @@ export default function Admin() {
     setConfirmReverse(null);
   };
 
+  const runGravityAction = async (
+    id: number,
+    path: string,
+    body: object,
+    okTitle: string,
+    okDesc: string,
+  ) => {
+    setBusyKey(`gw:${id}`);
+    try {
+      const res = await fetch(`${BASE}${path}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        let msg = "Action failed.";
+        try {
+          const j = await res.json();
+          msg = j.error ?? msg;
+        } catch {
+          /* non-JSON response */
+        }
+        throw new Error(msg);
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin-gravity-purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-matrix-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-matrix-txns"] });
+      toast({ title: okTitle, description: okDesc });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Action failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const approveGravity = (id: number) =>
+    runGravityAction(
+      id,
+      `/api/admin/gravity-purchases/${id}/approve`,
+      {},
+      "Gravity Credited",
+      "Buyer's Gravity has been credited from the Reserve pool.",
+    );
+
+  const handleGwReject = () => {
+    if (!gwRejectId) return;
+    const id = gwRejectId;
+    runGravityAction(
+      id,
+      `/api/admin/gravity-purchases/${id}/reject`,
+      { reason: gwRejectReason },
+      "Request Rejected",
+      "The purchase request was rejected.",
+    );
+    setGwRejectId(null);
+    setGwRejectReason("");
+  };
+
+  const saveGatewaySettings = async () => {
+    setGwSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/admin/gateway-settings`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(gwForm),
+      });
+      if (!res.ok) {
+        let msg = "Save failed.";
+        try {
+          const j = await res.json();
+          msg = j.error ?? msg;
+        } catch {
+          /* non-JSON response */
+        }
+        throw new Error(msg);
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin-gateway-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["gateway-settings"] });
+      toast({ title: "Saved", description: "Bank / UPI details updated." });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Save failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setGwSaving(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
@@ -477,6 +625,7 @@ export default function Admin() {
             <TabsTrigger value="txns">⚡ Transactions</TabsTrigger>
             <TabsTrigger value="assets">Asset Registry</TabsTrigger>
             <TabsTrigger value="users">Portal Users</TabsTrigger>
+            <TabsTrigger value="gateway">💰 Gravity Gateway</TabsTrigger>
           </TabsList>
 
           <TabsContent
@@ -1021,6 +1170,220 @@ export default function Admin() {
                     ))}
                   </tbody>
                 </table>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="gateway" className="space-y-4">
+            {/* Bank / UPI settings */}
+            <div className="rounded-xl border border-zinc-800 p-5 bg-zinc-950">
+              <h3 className="text-cyan-400 font-bold font-mono text-sm tracking-widest mb-1">
+                🏦 INR PAYMENT DETAILS
+              </h3>
+              <p className="text-zinc-600 text-[11px] font-mono mb-4">
+                Citizens see these details when buying Gravity. Approved requests
+                credit Gravity at ₹{GRAVITY_RATE.toLocaleString("en-IN")} = 1 G
+                from the Reserve pool.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(
+                  [
+                    ["bankName", "Bank Name"],
+                    ["accountName", "Account Holder Name"],
+                    ["accountNumber", "Account Number"],
+                    ["ifsc", "IFSC Code"],
+                    ["upiId", "UPI ID"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="text-zinc-400 text-xs font-mono">
+                      {label}
+                    </label>
+                    <input
+                      value={gwForm[key]}
+                      onChange={(e) =>
+                        setGwForm((f) => ({ ...f, [key]: e.target.value }))
+                      }
+                      className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3">
+                <label className="text-zinc-400 text-xs font-mono">
+                  Instructions (optional)
+                </label>
+                <Textarea
+                  value={gwForm.instructions}
+                  onChange={(e) =>
+                    setGwForm((f) => ({ ...f, instructions: e.target.value }))
+                  }
+                  className="w-full mt-1 bg-black border-zinc-700 text-white text-sm"
+                  rows={2}
+                />
+              </div>
+              <Button
+                onClick={saveGatewaySettings}
+                disabled={gwSaving}
+                className="mt-4 bg-cyan-600 hover:bg-cyan-600/90 text-white"
+              >
+                {gwSaving ? "Saving..." : "Save Payment Details"}
+              </Button>
+            </div>
+
+            {/* Requests queue */}
+            <div className="rounded-xl overflow-hidden border border-zinc-800">
+              <div className="bg-zinc-950 px-4 py-3 border-b border-zinc-800">
+                <h3 className="text-cyan-400 font-bold font-mono text-sm tracking-widest">
+                  ⏳ GRAVITY PURCHASE REQUESTS
+                </h3>
+              </div>
+              {gravityReqs.length === 0 ? (
+                <div className="p-8 text-center text-zinc-600 font-mono text-sm">
+                  No purchase requests yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-zinc-800 text-zinc-500">
+                        <th className="text-left px-4 py-2">CITIZEN</th>
+                        <th className="text-right px-4 py-2">INR</th>
+                        <th className="text-right px-4 py-2">GRAVITY</th>
+                        <th className="text-left px-4 py-2">PROOF</th>
+                        <th className="text-left px-4 py-2">REF</th>
+                        <th className="text-left px-4 py-2">STATUS</th>
+                        <th className="text-left px-4 py-2">DATE</th>
+                        <th className="text-right px-4 py-2">ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gravityReqs.map((r) => (
+                        <tr key={r.id} className="border-b border-zinc-900">
+                          <td className="px-4 py-2 align-top">
+                            <div className="text-white font-bold">
+                              {r.userName ?? "—"}
+                            </div>
+                            <div className="text-zinc-500">{r.userEmail}</div>
+                            {r.accountNumber && (
+                              <div className="text-zinc-600">
+                                {r.accountNumber}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 align-top text-right text-zinc-300">
+                            ₹{fmtG(r.inrAmount)}
+                          </td>
+                          <td className="px-4 py-2 align-top text-right text-cyan-400 font-bold">
+                            {fmtG(r.gravityAmount)}
+                          </td>
+                          <td className="px-4 py-2 align-top">
+                            <div className="flex flex-col gap-1">
+                              {(r.proofUrls ?? []).map(
+                                (path: string, i: number) => (
+                                  <a
+                                    key={path}
+                                    href={`${BASE}/api/storage${path}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 hover:underline"
+                                  >
+                                    <FileText className="h-3 w-3" /> Proof {i + 1}
+                                  </a>
+                                ),
+                              )}
+                            </div>
+                          </td>
+                          <td
+                            className="px-4 py-2 align-top text-zinc-400 max-w-[120px] truncate"
+                            title={r.reference ?? ""}
+                          >
+                            {r.reference ?? "—"}
+                          </td>
+                          <td className="px-4 py-2 align-top">
+                            {r.status === "approved" ? (
+                              <Badge className="bg-green-600">Approved</Badge>
+                            ) : r.status === "rejected" ? (
+                              <Badge variant="destructive">Rejected</Badge>
+                            ) : (
+                              <Badge className="bg-yellow-600">Pending</Badge>
+                            )}
+                            {r.rejectionReason && (
+                              <div className="text-zinc-600 mt-1 max-w-[140px]">
+                                {r.rejectionReason}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 align-top text-zinc-500">
+                            {formatDate(r.createdAt)}
+                          </td>
+                          <td className="px-4 py-2 align-top text-right">
+                            {r.status === "pending" ? (
+                              <div className="flex gap-2 justify-end">
+                                <Button
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-600/90 text-white h-7"
+                                  disabled={busyKey === `gw:${r.id}`}
+                                  onClick={() => approveGravity(r.id)}
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                </Button>
+                                <Dialog
+                                  open={gwRejectId === r.id}
+                                  onOpenChange={(open) =>
+                                    !open && setGwRejectId(null)
+                                  }
+                                >
+                                  <DialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="h-7"
+                                      onClick={() => setGwRejectId(r.id)}
+                                    >
+                                      <XCircle className="h-3 w-3 mr-1" /> Reject
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>
+                                        Reject purchase request
+                                      </DialogTitle>
+                                    </DialogHeader>
+                                    <Textarea
+                                      placeholder="Reason (optional)"
+                                      value={gwRejectReason}
+                                      onChange={(e) =>
+                                        setGwRejectReason(e.target.value)
+                                      }
+                                    />
+                                    <DialogFooter>
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => setGwRejectId(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        onClick={handleGwReject}
+                                        disabled={busyKey === `gw:${r.id}`}
+                                      >
+                                        Reject request
+                                      </Button>
+                                    </DialogFooter>
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
+                            ) : (
+                              <span className="text-zinc-600">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </TabsContent>
