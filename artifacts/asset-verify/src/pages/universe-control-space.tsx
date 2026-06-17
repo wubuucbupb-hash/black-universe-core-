@@ -42,6 +42,7 @@ import {
   CheckCircle2,
   Lock,
 } from "lucide-react";
+import { useCurrency, CurrencySelect } from "@/components/currency-provider";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -98,6 +99,7 @@ export default function UniverseControlSpace() {
   const [, setLocation] = useLocation();
 
   const isAdmin = user?.role === "admin";
+  const { format } = useCurrency();
 
   // ── System Accounts ─────────────────────────────────────────────────────
   const { data: accountsData, isLoading: loadingAccounts } = useQuery({
@@ -115,11 +117,10 @@ export default function UniverseControlSpace() {
   const vaultAcct = accounts.find((a) => a.accountNumber === "000000000001");
   const coreGravity = coreAcct ? Number(coreAcct.gravityBalance) : 0;
   const vaultValue = vaultAcct ? Number(vaultAcct.gravityBalance) : 0;
-  const backingValue = coreGravity * 10000;
-  const requiredVault = backingValue * 2;
+  const requiredVault = coreGravity * 2;
   const vaultRatio =
-    backingValue > 0
-      ? (vaultValue / backingValue) * 100
+    coreGravity > 0
+      ? (vaultValue / coreGravity) * 100
       : vaultValue > 0
         ? Infinity
         : 100;
@@ -134,7 +135,7 @@ export default function UniverseControlSpace() {
     Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
   // After minting `gravityPreview` G, the vault must still cover 200%.
   const afterCoreGravity = coreGravity + gravityPreview;
-  const afterRequiredVault = afterCoreGravity * 10000 * 2;
+  const afterRequiredVault = afterCoreGravity * 2;
   const mintAllowed = vaultValue >= afterRequiredVault;
 
   const mintMutation = useMutation({
@@ -296,9 +297,12 @@ export default function UniverseControlSpace() {
 
         {/* ── System Accounts ── */}
         <section className="mb-10">
-          <h2 className="text-xs font-bold font-mono text-cyan-400 tracking-widest mb-3">
-            🔒 SYSTEM ACCOUNTS — GENESIS CORES
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-xs font-bold font-mono text-cyan-400 tracking-widest">
+              🔒 SYSTEM ACCOUNTS — GENESIS CORES
+            </h2>
+            <CurrencySelect />
+          </div>
           <div
             className={`mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border px-3 py-2 text-[11px] font-mono ${
               vaultHealthy
@@ -307,10 +311,10 @@ export default function UniverseControlSpace() {
             }`}
             data-testid="vault-status-banner"
           >
-            <span className="text-yellow-400">🏦 Vault ₹{fmt(vaultValue)}</span>
-            <span className="text-cyan-400">🌌 Core {fmt(coreGravity)} G</span>
+            <span className="text-yellow-400">🏦 Vault {format(vaultValue)}</span>
+            <span className="text-cyan-400">🌌 Core {format(coreGravity)}</span>
             <span className="text-zinc-400">
-              🔒 Need ₹{fmt(requiredVault)} (200%)
+              🔒 Need {format(requiredVault)} (200%)
             </span>
             <span
               className={`font-bold ${vaultHealthy ? "text-emerald-400" : "text-red-400"}`}
@@ -365,9 +369,7 @@ export default function UniverseControlSpace() {
                       {acc.accountNumber}
                     </div>
                     <div className="text-green-400 text-sm font-bold font-mono mt-1">
-                      {isVault
-                        ? `₹${fmt(acc.gravityBalance)}`
-                        : `${fmt(acc.gravityBalance)} G`}
+                      {format(acc.gravityBalance)}
                     </div>
                     {isSystem && (
                       <div className="text-red-400/70 text-[9px] font-mono tracking-widest">
@@ -513,15 +515,15 @@ export default function UniverseControlSpace() {
                       }`}
                       data-testid="mint-vault-check"
                     >
-                      <div>🏦 Vault backing held: ₹{fmt(vaultValue)}</div>
+                      <div>🏦 Vault backing held: {format(vaultValue)}</div>
                       <div>
-                        🔒 Required after mint (200%): ₹{fmt(afterRequiredVault)}
+                        🔒 Required after mint (200%): {format(afterRequiredVault)}
                       </div>
                       {gravityPreview > 0 && (
                         <div className="mt-1 font-bold">
                           {mintAllowed
                             ? "✅ Vault sufficient — mint allowed"
-                            : `⛔ Under-backed by ₹${fmt(Math.max(0, afterRequiredVault - vaultValue))} — top up the Vault first`}
+                            : `⛔ Under-backed by ${format(Math.max(0, afterRequiredVault - vaultValue))} — top up the Vault first`}
                         </div>
                       )}
                     </div>
@@ -560,21 +562,21 @@ export default function UniverseControlSpace() {
                     {/* Live status */}
                     <div className="grid grid-cols-2 gap-3 text-[11px] font-mono">
                       <div className="border border-zinc-800 rounded-md p-3 bg-black/40">
-                        <div className="text-zinc-500">VAULT VALUE (₹)</div>
+                        <div className="text-zinc-500">VAULT (GRAVITY)</div>
                         <div className="text-yellow-400 text-base font-bold">
-                          ₹{fmt(vaultValue)}
+                          {format(vaultValue)}
                         </div>
                       </div>
                       <div className="border border-zinc-800 rounded-md p-3 bg-black/40">
                         <div className="text-zinc-500">SYSTEM CORE GRAVITY</div>
                         <div className="text-cyan-400 text-base font-bold">
-                          {fmt(coreGravity)} G
+                          {format(coreGravity)}
                         </div>
                       </div>
                       <div className="border border-zinc-800 rounded-md p-3 bg-black/40">
                         <div className="text-zinc-500">REQUIRED (200%)</div>
                         <div className="text-white text-base font-bold">
-                          ₹{fmt(requiredVault)}
+                          {format(requiredVault)}
                         </div>
                       </div>
                       <div
@@ -595,13 +597,13 @@ export default function UniverseControlSpace() {
                     {/* Top up */}
                     <div className="border border-zinc-800 rounded-md p-3 space-y-2">
                       <label className="text-zinc-400 text-xs font-mono">
-                        Top up Vault (add ₹)
+                        Top up Vault (add Gravity)
                       </label>
                       <input
                         type="number"
                         min="0"
-                        step="10000"
-                        placeholder="e.g., 5000000"
+                        step="1"
+                        placeholder="e.g., 500 (Gravity)"
                         value={vaultForm.topup}
                         onChange={(e) =>
                           setVaultForm({ ...vaultForm, topup: e.target.value })
@@ -628,13 +630,13 @@ export default function UniverseControlSpace() {
                     {/* Re-anchor */}
                     <div className="border border-zinc-800 rounded-md p-3 space-y-2">
                       <label className="text-zinc-400 text-xs font-mono">
-                        Re-anchor Vault (set absolute ₹ value)
+                        Re-anchor Vault (set absolute Gravity value)
                       </label>
                       <input
                         type="number"
                         min="0"
-                        step="10000"
-                        placeholder="e.g., 20240000"
+                        step="1"
+                        placeholder="e.g., 200000 (Gravity)"
                         value={vaultForm.setValue}
                         onChange={(e) =>
                           setVaultForm({

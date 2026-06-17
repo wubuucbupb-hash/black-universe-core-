@@ -14,6 +14,11 @@ import Admin from "@/pages/admin";
 import UniverseControlSpace from "@/pages/universe-control-space";
 import MatrixEngine from "@/pages/matrix";
 import VaultPage from "@/pages/vault";
+import {
+  CurrencyProvider,
+  CurrencySelect,
+  useCurrency,
+} from "@/components/currency-provider";
 
 const queryClient = new QueryClient();
 
@@ -53,9 +58,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
+          <CurrencyProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+          </CurrencyProvider>
           <Toaster />
         </TooltipProvider>
       </AuthProvider>
@@ -80,13 +87,10 @@ const SYSTEM_LABELS: Record<string, string> = {
 };
 const SYSTEM_CORES = Object.keys(SYSTEM_LABELS);
 
-function fmtG(n: number | string) {
-  return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function Home() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { format } = useCurrency();
   const isAdmin = user?.role === "admin";
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -126,6 +130,7 @@ function Home() {
             <span className="text-zinc-500 text-xs font-mono">
               {user.role === "admin" ? "👑 FOUNDER ROOT" : `👤 ${user.name}`}
             </span>
+            <CurrencySelect className="bg-black border border-zinc-700 text-zinc-300 text-[10px] font-mono rounded px-1.5 py-1 focus:border-cyan-500 focus:outline-none max-w-[150px]" />
             <button
               onClick={() => setLocation("/dashboard")}
               className="px-3 py-1 text-[11px] font-bold font-mono bg-cyan-500 hover:bg-cyan-400 text-black rounded"
@@ -202,7 +207,7 @@ function Home() {
                         <div className="text-white text-xs font-semibold truncate mt-0.5">{SYSTEM_LABELS[acc.accountNumber] ?? acc.name}</div>
                         <div className="text-zinc-500 text-[10px] font-mono">{acc.accountNumber}</div>
                         <div className={`text-sm font-bold font-mono mt-1 ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                          {isVault ? `₹${fmtG(acc.gravityBalance)}` : `${fmtG(acc.gravityBalance)} G`}
+                          {format(acc.gravityBalance)}
                         </div>
                         {isSystem && (
                           <div className="text-red-400/70 text-[8px] font-mono tracking-widest mt-0.5">TOTAL GRAVITY SUPPLY</div>
@@ -227,7 +232,7 @@ function Home() {
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-zinc-500 text-[10px] font-mono">{c.accountNumber}</span>
                           <span className={`text-[11px] font-bold font-mono ${Number(c.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                            {fmtG(c.gravityBalance)} G
+                            {format(c.gravityBalance)}
                           </span>
                         </div>
                       </div>
@@ -316,7 +321,8 @@ function Home() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-4 py-2 border-b border-zinc-800 bg-black flex items-center gap-2">
             <span className="text-cyan-500 text-[10px] font-mono tracking-widest">🌌 LIVE SYSTEM POOLS</span>
-            <span className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <CurrencySelect className="ml-auto bg-black border border-zinc-700 text-zinc-300 text-[10px] font-mono rounded px-1.5 py-0.5 focus:border-cyan-500 focus:outline-none max-w-[130px]" />
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           </div>
           <div className="p-3">
             {systemAccounts.length === 0 ? (
@@ -330,7 +336,7 @@ function Home() {
                     <div key={acc.accountNumber} className={`rounded px-2 py-1.5 ${isFounder ? "bg-emerald-500/10 border border-emerald-500/20" : isVault ? "bg-yellow-500/10 border border-yellow-500/20" : "bg-zinc-800/50"}`}>
                       <div className="text-[9px] font-mono text-zinc-500 truncate">{SYSTEM_LABELS[acc.accountNumber]}</div>
                       <div className={`text-xs font-bold font-mono ${Number(acc.gravityBalance) > 0 ? "text-green-400" : "text-zinc-600"}`}>
-                        {isVault ? `₹${fmtG(acc.gravityBalance)}` : `${fmtG(acc.gravityBalance)} G`}
+                        {format(acc.gravityBalance)}
                       </div>
                     </div>
                   );

@@ -23,6 +23,7 @@ import {
   totalDistributedGravity,
   VAULT_ACCOUNT,
   SYSTEM_MAIN,
+  GRAVITY_RATE,
 } from "../lib/matrixEngine";
 import { encrypt } from "../lib/encryption";
 
@@ -216,16 +217,17 @@ router.post("/admin/assets/:id/deposit", async (req, res): Promise<void> => {
       const targetWallet = await ensureUserMatrixAccount(owner, tx);
 
       const claimedValue = parseFloat(claimed.claimedValue);
+      const vaultGravity = claimedValue / GRAVITY_RATE;
 
-      // 1B model: the asset's ₹ value backs the Vault. Gravity is NOT minted
-      // here — minting is a separate, Vault-gated (200%) Founder action.
-      await adjustBalance(VAULT_ACCOUNT, claimedValue.toFixed(6), tx);
+      // 1B model: the asset's value backs the Vault, counted in Gravity. Gravity
+      // is NOT minted here — minting is a separate, Vault-gated (200%) action.
+      await adjustBalance(VAULT_ACCOUNT, vaultGravity.toFixed(6), tx);
       await logTx(
         "DEPOSIT",
-        `🏦 [ASSET → VAULT] ₹${claimedValue.toFixed(2)} — "${claimed.description}" added to Vault backing`,
+        `🏦 [ASSET → VAULT] +${vaultGravity.toFixed(2)} G (₹${claimedValue.toFixed(2)}) — "${claimed.description}" added to Vault backing`,
         undefined,
         VAULT_ACCOUNT,
-        claimedValue.toFixed(6),
+        vaultGravity.toFixed(6),
         tx,
       );
 
@@ -293,7 +295,7 @@ router.post("/admin/vault/anchor", async (req, res): Promise<void> => {
         await adjustBalance(VAULT_ACCOUNT, amt.toFixed(6), tx);
         await logTx(
           "VAULT",
-          `🏦 [VAULT TOP-UP] +₹${amt.toFixed(2)} added to Vault backing`,
+          `🏦 [VAULT TOP-UP] +${amt.toFixed(2)} G added to Vault backing`,
           undefined,
           VAULT_ACCOUNT,
           amt.toFixed(6),
@@ -307,7 +309,7 @@ router.post("/admin/vault/anchor", async (req, res): Promise<void> => {
           await setBalance(VAULT_ACCOUNT, val.toFixed(6), tx);
           await logTx(
             "VAULT",
-            `🏦 [VAULT RE-ANCHOR] Vault value set to ₹${val.toFixed(2)}`,
+            `🏦 [VAULT RE-ANCHOR] Vault gravity set to ${val.toFixed(2)} G`,
             undefined,
             VAULT_ACCOUNT,
             val.toFixed(6),
