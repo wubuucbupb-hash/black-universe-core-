@@ -68,7 +68,7 @@ export default function Dashboard() {
   function fmtG(n: number | string) {
     return Number(n).toLocaleString("en-IN", {
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 6,
     });
   }
 

@@ -32,7 +32,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
 function fmt(n: number | string) {
   return Number(n).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 6,
   });
 }
 
