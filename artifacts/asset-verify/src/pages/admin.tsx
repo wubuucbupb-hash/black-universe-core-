@@ -625,7 +625,7 @@ export default function Admin() {
             <TabsTrigger value="txns">⚡ Transactions</TabsTrigger>
             <TabsTrigger value="assets">Asset Registry</TabsTrigger>
             <TabsTrigger value="users">Portal Users</TabsTrigger>
-            <TabsTrigger value="gateway">💰 Gravity Gateway</TabsTrigger>
+            <TabsTrigger value="gateway">💱 Gravity Exchange</TabsTrigger>
           </TabsList>
 
           <TabsContent
@@ -1181,9 +1181,10 @@ export default function Admin() {
                 🏦 INR PAYMENT DETAILS
               </h3>
               <p className="text-zinc-600 text-[11px] font-mono mb-4">
-                Citizens see these details when buying Gravity. Approved requests
-                credit Gravity at ₹{GRAVITY_RATE.toLocaleString("en-IN")} = 1 G
-                from the Reserve pool.
+                Citizens see these details when exchanging INR for Gravity.
+                Approved requests credit Gravity at ₹
+                {GRAVITY_RATE.toLocaleString("en-IN")} = 1 G from the Reserve
+                pool.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(
@@ -1235,7 +1236,7 @@ export default function Admin() {
             <div className="rounded-xl overflow-hidden border border-zinc-800">
               <div className="bg-zinc-950 px-4 py-3 border-b border-zinc-800">
                 <h3 className="text-cyan-400 font-bold font-mono text-sm tracking-widest">
-                  ⏳ GRAVITY PURCHASE REQUESTS
+                  ⏳ GRAVITY EXCHANGE REQUESTS
                 </h3>
               </div>
               {gravityReqs.length === 0 ? (

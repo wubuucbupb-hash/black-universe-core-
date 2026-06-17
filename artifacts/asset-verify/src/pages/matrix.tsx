@@ -870,16 +870,16 @@ export default function MatrixEngine() {
           {/* Buy Gravity — INR Gateway */}
           <div className="border border-zinc-800 rounded-xl p-5 bg-zinc-950">
             <h2 className="text-sm font-bold font-mono text-cyan-400 mb-1 tracking-widest">
-              💰 BUY GRAVITY · INR GATEWAY
+              💱 GRAVITY EXCHANGE · INR
             </h2>
             <p className="text-zinc-600 text-[11px] font-mono mb-4">
-              Pay INR to the account below, upload proof, and submit. Admin
-              verifies &amp; credits Gravity at ₹
+              Exchange INR for Gravity. Transfer INR to the account below, upload
+              proof, and submit. Admin verifies &amp; credits Gravity at ₹
               {GRAVITY_RATE.toLocaleString("en-IN")} = 1 G.
             </p>
             {!user ? (
               <div className="p-3 border border-zinc-700 rounded-md text-zinc-500 text-sm font-mono">
-                Login required to buy Gravity
+                Login required to exchange Gravity
               </div>
             ) : (
               <div className="space-y-3">
@@ -1024,7 +1024,7 @@ export default function MatrixEngine() {
                 >
                   {purchaseMutation.isPending
                     ? "⏳ SUBMITTING..."
-                    : "💰 SUBMIT GRAVITY PURCHASE"}
+                    : "💱 SUBMIT EXCHANGE REQUEST"}
                 </button>
 
                 {myPurchases.length > 0 && (
