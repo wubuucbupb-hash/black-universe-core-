@@ -155,23 +155,11 @@ export async function flushPendingFees(): Promise<{
         );
       }
       for (const [poolAccount, total] of sums) {
+        // Transaction revenue (P2P / escrow fees) accrues to its pool account
+        // ONLY (the Foundation account for the 1% fees). It is NOT added to the
+        // System Vault backing — the Vault grows only from asset approvals and
+        // revaluation. The accumulated Foundation balance IS the fee total.
         await adjustBalance(poolAccount, total.toFixed(6), tx);
-        // Transaction revenue collected by the Foundation ALSO grows the System
-        // Vault backing by the same amount (counted in Gravity, like an asset
-        // approval — the Foundation still keeps the fee as its income). Together
-        // with revaluation and new asset submissions, this is why the Vault
-        // backing only ever goes UP, never down.
-        if (poolAccount === FOUNDER_ACCOUNT) {
-          await adjustBalance(VAULT_ACCOUNT, total.toFixed(6), tx);
-          await logTx(
-            "DEPOSIT",
-            `🏦 [REVENUE → VAULT] +${total.toFixed(2)} G transaction revenue added to System Vault backing`,
-            undefined,
-            VAULT_ACCOUNT,
-            total.toFixed(6),
-            tx,
-          );
-        }
       }
       await tx.delete(pendingFeesTable).where(
         inArray(

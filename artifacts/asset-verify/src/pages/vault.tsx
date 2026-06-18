@@ -396,28 +396,43 @@ export default function VaultPage() {
                         </div>
                         <div className="text-white text-sm font-semibold truncate">{e.description}</div>
                         {revalueId === e.id ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <input
-                              type="number"
-                              min="0"
-                              value={revalueValue}
-                              onChange={(ev) => setRevalueValue(ev.target.value)}
-                              className="w-32 bg-black border border-cyan-700 rounded px-2 py-1 text-cyan-300 text-xs font-mono focus:border-cyan-500 focus:outline-none"
-                            />
-                            <button
-                              onClick={() => revalueMutation.mutate({ id: e.id, valuation: revalueValue })}
-                              disabled={revalueMutation.isPending || !revalueValue}
-                              className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-black text-[10px] font-bold rounded"
-                            >
-                              SAVE
-                            </button>
-                            <button
-                              onClick={() => { setRevalueId(null); setRevalueValue(""); }}
-                              className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold rounded"
-                            >
-                              CANCEL
-                            </button>
-                          </div>
+                          <>
+                            <div className="flex items-center gap-2 mt-1">
+                              <input
+                                type="number"
+                                min="0"
+                                value={revalueValue}
+                                onChange={(ev) => setRevalueValue(ev.target.value)}
+                                className="w-32 bg-black border border-cyan-700 rounded px-2 py-1 text-cyan-300 text-xs font-mono focus:border-cyan-500 focus:outline-none"
+                              />
+                              <button
+                                onClick={() => revalueMutation.mutate({ id: e.id, valuation: revalueValue })}
+                                disabled={revalueMutation.isPending || !revalueValue}
+                                className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-black text-[10px] font-bold rounded"
+                              >
+                                SAVE
+                              </button>
+                              <button
+                                onClick={() => { setRevalueId(null); setRevalueValue(""); }}
+                                className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold rounded"
+                              >
+                                CANCEL
+                              </button>
+                            </div>
+                            {revalueValue && Number(revalueValue) !== Number(e.valuation) && (
+                              <div className="text-[10px] font-mono mt-1" data-testid={`revalue-preview-${e.id}`}>
+                                {Number(revalueValue) > Number(e.valuation) ? (
+                                  <span className="text-emerald-400">
+                                    🏦 +{fmt((Number(revalueValue) - Number(e.valuation)) / GRAVITY_RATE)} G → System Vault backing
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-500">
+                                    📉 Valuation only · System Vault unchanged (value never falls)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </>
                         ) : (
                           <div className="text-cyan-400 text-xs font-mono mt-0.5">₹ {fmt(e.valuation)}</div>
                         )}

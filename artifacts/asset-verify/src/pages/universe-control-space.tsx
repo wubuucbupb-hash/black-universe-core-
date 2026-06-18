@@ -129,6 +129,12 @@ export default function UniverseControlSpace() {
   );
   const coreGravity = coreAcct ? Number(coreAcct.gravityBalance) : 0;
   const vaultValue = vaultAcct ? Number(vaultAcct.gravityBalance) : 0;
+  const foundationAcct = accounts.find(
+    (a) => a.accountNumber === "111111111111",
+  );
+  const foundationFees = foundationAcct
+    ? Number(foundationAcct.gravityBalance)
+    : 0;
   const usersVaultValue = usersVaultAcct
     ? Number(usersVaultAcct.gravityBalance)
     : 0;
@@ -320,6 +326,9 @@ export default function UniverseControlSpace() {
               📊 Total Vault {format(totalVaultValue)}
             </span>
             <span className="text-cyan-400">🌌 Core {format(coreGravity)}</span>
+            <span className="text-emerald-400" data-testid="foundation-fees">
+              💰 Foundation Fees {format(foundationFees)}
+            </span>
             <span className="text-zinc-400">
               🔒 Need {format(requiredVault)} (200%)
             </span>
