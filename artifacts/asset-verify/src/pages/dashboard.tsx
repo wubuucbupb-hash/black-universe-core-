@@ -18,6 +18,7 @@ import {
   currencySymbol,
   fetchInrPerUnitRates,
 } from "@/lib/currency";
+import { GRAVITY } from "@/components/currency-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -91,9 +92,12 @@ export default function Dashboard() {
     };
   }, []);
   const currencyList = useMemo(() => currencyOptions(), []);
-  const selectedSymbol = currencySymbol(currencyCode);
-  const fxRate = rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
-  const rateKnown = typeof fxRate === "number" && fxRate > 0;
+  const isGravity = currencyCode === GRAVITY;
+  const selectedSymbol = isGravity ? "G" : currencySymbol(currencyCode);
+  const fxRate = isGravity
+    ? GRAVITY_RATE
+    : rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
+  const rateKnown = isGravity || (typeof fxRate === "number" && fxRate > 0);
 
   function handleCurrencyChange(next: string) {
     setCurrencyCode(next);
@@ -102,7 +106,8 @@ export default function Dashboard() {
     } catch {
       // ignore storage write errors
     }
-    const nextRate = rates[next] ?? STATIC_INR_PER_UNIT[next];
+    const nextRate =
+      next === GRAVITY ? GRAVITY_RATE : rates[next] ?? STATIC_INR_PER_UNIT[next];
     setLocalAmount(
       txForm.amount && nextRate
         ? String((Number(txForm.amount) * GRAVITY_RATE) / nextRate)
@@ -311,6 +316,7 @@ export default function Dashboard() {
                   data-testid="select-balance-currency"
                   aria-label="Display currency"
                 >
+                  <option value={GRAVITY}>🌌 Gravity (G)</option>
                   {currencyList.map((c) => (
                     <option key={c.code} value={c.code}>
                       {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
@@ -404,6 +410,7 @@ export default function Dashboard() {
                         data-testid="select-transfer-currency"
                         aria-label="Transfer currency"
                       >
+                        <option value={GRAVITY}>🌌 G</option>
                         {currencyList.map((c) => (
                           <option key={c.code} value={c.code}>
                             {c.code}

@@ -18,6 +18,7 @@ import {
   detectDefaultCurrency,
   fetchInrPerUnitRates,
 } from "@/lib/currency";
+import { GRAVITY } from "@/components/currency-provider";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -213,12 +214,15 @@ export default function MatrixEngine() {
     };
   }, []);
   const options = useMemo(() => currencyOptions(), []);
-  const selectedSymbol = currencySymbol(currencyCode);
+  const isGravity = currencyCode === GRAVITY;
+  const selectedSymbol = isGravity ? "G" : currencySymbol(currencyCode);
   // INR value of one unit of the selected currency. May be unknown for an exotic
   // currency when offline — then the local-currency convenience input is hidden
   // and the citizen enters Gravity directly.
-  const fxRate = rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
-  const rateKnown = typeof fxRate === "number" && fxRate > 0;
+  const fxRate = isGravity
+    ? GRAVITY_RATE
+    : rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
+  const rateKnown = isGravity || (typeof fxRate === "number" && fxRate > 0);
 
   const transferMutation = useMutation({
     mutationFn: (body: object) =>
@@ -710,7 +714,9 @@ export default function MatrixEngine() {
                         // Keep the Gravity amount fixed; restate the local amount
                         // in the newly selected currency.
                         const nextRate =
-                          rates[nextCode] ?? STATIC_INR_PER_UNIT[nextCode];
+                          nextCode === GRAVITY
+                            ? GRAVITY_RATE
+                            : rates[nextCode] ?? STATIC_INR_PER_UNIT[nextCode];
                         setInrAmount(
                           txForm.amount && nextRate
                             ? String(
@@ -722,6 +728,7 @@ export default function MatrixEngine() {
                       }}
                       className="bg-black border border-zinc-700 rounded-md px-2 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none max-w-[8rem]"
                     >
+                      <option value={GRAVITY}>🌌 Gravity (G)</option>
                       {options.map((c) => (
                         <option key={c.code} value={c.code}>
                           {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
