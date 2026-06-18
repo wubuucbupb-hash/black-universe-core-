@@ -4,7 +4,8 @@ import { logger } from "./logger";
 
 const SYSTEM_ACCOUNTS = [
   { accountNumber: "000000000000", name: "Black Universe — System Main Account", type: "System Core" },
-  { accountNumber: "000000000001", name: "Black Universe — Reserve Vault (Asset Backing)", type: "Vault" },
+  { accountNumber: "000000000001", name: "Black Universe — Reserve Vault (System Asset Backing)", type: "Vault" },
+  { accountNumber: "000000000002", name: "Black Universe — Users Vault (Custody Locks)", type: "Vault" },
   { accountNumber: "111111111111", name: "Founder Personal Account", type: "Founder Core" },
   { accountNumber: "222222222222", name: "Black Universe — Reserve Account", type: "Reserve Pool" },
   { accountNumber: "333333333333", name: "Black Universe — Stability Account", type: "Stability Pool" },

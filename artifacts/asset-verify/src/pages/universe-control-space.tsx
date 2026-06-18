@@ -60,6 +60,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
 
 const SYSTEM_CORES = [
   "000000000001",
+  "000000000002",
   "000000000000",
   "111111111111",
   "222222222222",
@@ -118,10 +119,20 @@ export default function UniverseControlSpace() {
     );
 
   // ── Vault 200% backing status ───────────────────────────────────────────
+  // System Vault (000000000001) is the ONLY pool that backs minting. The Users
+  // Vault (000000000002) holds user custody locks — shown + counted in the Total
+  // Vault, but it NEVER backs minting.
   const coreAcct = accounts.find((a) => a.accountNumber === "000000000000");
   const vaultAcct = accounts.find((a) => a.accountNumber === "000000000001");
+  const usersVaultAcct = accounts.find(
+    (a) => a.accountNumber === "000000000002",
+  );
   const coreGravity = coreAcct ? Number(coreAcct.gravityBalance) : 0;
   const vaultValue = vaultAcct ? Number(vaultAcct.gravityBalance) : 0;
+  const usersVaultValue = usersVaultAcct
+    ? Number(usersVaultAcct.gravityBalance)
+    : 0;
+  const totalVaultValue = vaultValue + usersVaultValue;
   const requiredVault = coreGravity * 2;
   const vaultRatio =
     coreGravity > 0
@@ -299,7 +310,15 @@ export default function UniverseControlSpace() {
             }`}
             data-testid="vault-status-banner"
           >
-            <span className="text-yellow-400">🏦 Vault {format(vaultValue)}</span>
+            <span className="text-yellow-400">
+              🏦 System Vault {format(vaultValue)}
+            </span>
+            <span className="text-sky-400">
+              👥 Users Vault {format(usersVaultValue)}
+            </span>
+            <span className="text-fuchsia-400">
+              📊 Total Vault {format(totalVaultValue)}
+            </span>
             <span className="text-cyan-400">🌌 Core {format(coreGravity)}</span>
             <span className="text-zinc-400">
               🔒 Need {format(requiredVault)} (200%)
@@ -325,20 +344,25 @@ export default function UniverseControlSpace() {
                 const isFounder = acc.accountNumber === "111111111111";
                 const isSystem = acc.accountNumber === "000000000000";
                 const isVault = acc.accountNumber === "000000000001";
+                const isUsersVault = acc.accountNumber === "000000000002";
                 const border = isFounder
                   ? "border-emerald-500/60"
                   : isSystem
                     ? "border-red-500/60"
                     : isVault
                       ? "border-yellow-500/60"
-                      : "border-cyan-500/30";
+                      : isUsersVault
+                        ? "border-sky-500/60"
+                        : "border-cyan-500/30";
                 const typeColor = isFounder
                   ? "text-emerald-400"
                   : isSystem
                     ? "text-red-400"
                     : isVault
                       ? "text-yellow-400"
-                      : "text-cyan-400";
+                      : isUsersVault
+                        ? "text-sky-400"
+                        : "text-cyan-400";
                 return (
                   <div
                     key={acc.accountNumber}
@@ -366,7 +390,12 @@ export default function UniverseControlSpace() {
                     )}
                     {isVault && (
                       <div className="text-yellow-400/70 text-[9px] font-mono tracking-widest">
-                        ASSET BACKING · 200%
+                        SYSTEM · BACKS MINT
+                      </div>
+                    )}
+                    {isUsersVault && (
+                      <div className="text-sky-400/70 text-[9px] font-mono tracking-widest">
+                        USERS CUSTODY · NO MINT
                       </div>
                     )}
                   </div>

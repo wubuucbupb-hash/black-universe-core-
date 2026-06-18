@@ -135,7 +135,7 @@ export default function VaultPage() {
   const lockMutation = useMutation({
     mutationFn: (body: object) => apiFetch("/api/custody/lock", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
-      toast({ title: "🔒 Asset Locked in Vault", description: "Value added to Vault backing" });
+      toast({ title: "🔒 Asset Locked in Users Vault", description: "Added to Users Vault — does NOT back minting" });
       setLockForm({ ownerAccount: "", assetType: "", valuation: "", description: "" });
       setLockLocalAmount("");
       qc.invalidateQueries({ queryKey: ["custody-summary"] });
@@ -226,7 +226,7 @@ export default function VaultPage() {
                   <select value={escrowForm.senderAccount} onChange={(e) => setEscrowForm({ ...escrowForm, senderAccount: e.target.value })}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none">
                     <option value="">— Select Sender —</option>
-                    {accounts.filter(a => a.accountNumber !== "000000000000" && a.accountNumber !== "000000000001").map(a => (
+                    {accounts.filter(a => a.accountNumber !== "000000000000" && a.accountNumber !== "000000000001" && a.accountNumber !== "000000000002").map(a => (
                       <option key={a.accountNumber} value={a.accountNumber}>
                         {a.name} ({a.accountNumber}) [{fmt(a.gravityBalance)} G]
                       </option>
@@ -238,7 +238,7 @@ export default function VaultPage() {
                   <select value={escrowForm.receiverAccount} onChange={(e) => setEscrowForm({ ...escrowForm, receiverAccount: e.target.value })}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none">
                     <option value="">— Select Receiver —</option>
-                    {accounts.filter(a => a.accountNumber !== "000000000000" && a.accountNumber !== "000000000001").map(a => (
+                    {accounts.filter(a => a.accountNumber !== "000000000000" && a.accountNumber !== "000000000001" && a.accountNumber !== "000000000002").map(a => (
                       <option key={a.accountNumber} value={a.accountNumber}>
                         {a.name} ({a.accountNumber})
                       </option>
@@ -343,8 +343,8 @@ export default function VaultPage() {
                     </p>
                   )}
                   {lockGravityPreview > 0 && (
-                    <p className="text-cyan-400 text-xs mt-1 font-mono">
-                      🏦 Adds {fmt(lockGravityPreview)} G to Vault backing
+                    <p className="text-sky-400 text-xs mt-1 font-mono">
+                      👥 Adds {fmt(lockGravityPreview)} G to Users Vault (no mint backing)
                     </p>
                   )}
                 </div>
@@ -356,7 +356,7 @@ export default function VaultPage() {
                 </div>
                 <button onClick={() => lockMutation.mutate(lockForm)} disabled={lockMutation.isPending || !lockForm.valuation}
                   className="w-full py-3 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white font-bold rounded-md transition-all text-sm">
-                  {lockMutation.isPending ? "⏳ LOCKING..." : "🏦 LOCK ASSET IN VAULT"}
+                  {lockMutation.isPending ? "⏳ LOCKING..." : "👥 LOCK IN USERS VAULT"}
                 </button>
               </div>
             </div>

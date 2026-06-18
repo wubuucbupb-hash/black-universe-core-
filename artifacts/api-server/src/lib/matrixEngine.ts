@@ -26,6 +26,12 @@ export const GROWTH_ACCOUNT = "555555555555";
 // creates a MATCHING amount in System Core — so Vault and Core grow 1:1 (the
 // asset value exists twice = 200% total creation), and Core never exceeds Vault.
 export const VAULT_ACCOUNT = "000000000001";
+// Users Vault — holds the Gravity value of assets USERS lock into custody (the
+// manual locks on the /vault page). Kept STRUCTURALLY SEPARATE from the System
+// Vault so user-locked value NEVER backs minting: the mint gate reads the
+// System Vault (VAULT_ACCOUNT) only. The Users Vault is still visible and is
+// counted in the Total Vault purely for display.
+export const USERS_VAULT = "000000000002";
 // ₹ value represented by one unit of Gravity (₹10,000 = 1 G).
 export const GRAVITY_RATE = 10000;
 // Backing floor: System Core gravity must never exceed Vault gravity (1:1).
@@ -165,7 +171,9 @@ export async function flushPendingFees(): Promise<{
 }
 
 export interface VaultStatus {
-  vaultGravity: number; // Gravity currently held in the Vault (asset backing)
+  vaultGravity: number; // System Vault Gravity (asset backing) — the ONLY pool that backs minting
+  usersVaultGravity: number; // Users Vault Gravity (custody locks) — does NOT back minting
+  totalVaultGravity: number; // System Vault + Users Vault (display only)
   coreGravity: number; // total minted Gravity in System Core
   requiredVault: number; // 200% of coreGravity, in Gravity
   ratio: number; // vaultGravity / coreGravity × 100 (% backed)
@@ -183,10 +191,19 @@ export async function getVaultStatus(
       gravityBalance: matrixAccountsTable.gravityBalance,
     })
     .from(matrixAccountsTable)
-    .where(inArray(matrixAccountsTable.accountNumber, [VAULT_ACCOUNT, SYSTEM_MAIN]));
+    .where(
+      inArray(matrixAccountsTable.accountNumber, [
+        VAULT_ACCOUNT,
+        USERS_VAULT,
+        SYSTEM_MAIN,
+      ]),
+    );
 
   const vaultGravity = Number(
     rows.find((r) => r.accountNumber === VAULT_ACCOUNT)?.gravityBalance ?? 0,
+  );
+  const usersVaultGravity = Number(
+    rows.find((r) => r.accountNumber === USERS_VAULT)?.gravityBalance ?? 0,
   );
   const coreGravity = Number(
     rows.find((r) => r.accountNumber === SYSTEM_MAIN)?.gravityBalance ?? 0,
@@ -201,6 +218,8 @@ export async function getVaultStatus(
 
   return {
     vaultGravity,
+    usersVaultGravity,
+    totalVaultGravity: vaultGravity + usersVaultGravity,
     coreGravity,
     requiredVault,
     ratio,
@@ -219,7 +238,11 @@ export async function totalDistributedGravity(
     })
     .from(matrixAccountsTable)
     .where(
-      notInArray(matrixAccountsTable.accountNumber, [SYSTEM_MAIN, VAULT_ACCOUNT]),
+      notInArray(matrixAccountsTable.accountNumber, [
+        SYSTEM_MAIN,
+        VAULT_ACCOUNT,
+        USERS_VAULT,
+      ]),
     );
   return Number(row?.total ?? 0);
 }

@@ -206,7 +206,7 @@ export default function Admin() {
     return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  const SYSTEM_CORES = ["000000000000","000000000001","111111111111","222222222222","333333333333","444444444444","555555555555","666666666666","777777777777","888888888888","999999999999"];
+  const SYSTEM_CORES = ["000000000000","000000000001","000000000002","111111111111","222222222222","333333333333","444444444444","555555555555","666666666666","777777777777","888888888888","999999999999"];
   const allAccounts: any[] = matrixAccounts?.accounts ?? [];
   const custodyEntries: any[] = custodyData?.entries ?? [];
   const txnLogs: any[] = matrixTxns?.logs ?? [];

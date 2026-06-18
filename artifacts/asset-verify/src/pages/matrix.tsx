@@ -79,7 +79,8 @@ export default function MatrixEngine() {
   const allWallets = accounts.filter(
     (a) =>
       a.accountNumber !== "000000000000" &&
-      a.accountNumber !== "000000000001",
+      a.accountNumber !== "000000000001" &&
+      a.accountNumber !== "000000000002",
   );
   const transferWallets = isAdmin ? accounts : allWallets;
 

@@ -8,7 +8,8 @@ description: How Gravity backing is split — BOTH Vault and System Core are cou
 Two distinct system accounts, do not conflate them. **Both store GRAVITY** in `gravityBalance`:
 
 - **System Core `000000000000`** (type "System Core") — holds the TOTAL minted Gravity as an odometer. On mint it does BOTH `core += gravity` AND distributes the gravity to pools, so core always equals the sum of all distributed gravity.
-- **Reserve Vault `000000000001`** (type "Vault") — holds GRAVITY that backs the system. `gravityBalance` = gravity (NOT ₹). Prefix `0` keeps it out of citizen clusters (safe).
+- **System (Reserve) Vault `000000000001`** (type "Vault") — holds GRAVITY that backs the system. `gravityBalance` = gravity (NOT ₹). The ONLY pool the mint gate reads. Prefix `0` keeps it out of citizen clusters (safe).
+- **Users Vault `000000000002`** (type "Vault") — holds GRAVITY from user custody locks (custody lock/revalue/release hit THIS, not the System Vault). Visible + counted in "Total Vault" (System+Users) for display, but NEVER backs minting. See `mint-vault-registry-only.md`.
 
 **Why (changed):** Vault used to store ₹ in `gravityBalance`. Now everything backend-side is gravity-vs-gravity. Do NOT revert Vault to ₹ or re-introduce `× GRAVITY_RATE` into the invariant.
 
