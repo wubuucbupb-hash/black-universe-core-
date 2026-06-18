@@ -6,12 +6,20 @@ import {
   adjustBalance,
   recordPoolFee,
   logTx,
-  USERS_VAULT,
+  GROWTH_ACCOUNT,
   GRAVITY_RATE,
 } from "../lib/matrixEngine";
 
 const router = Router();
 const FOUNDER_ACCOUNT = "111111111111";
+
+// The asset is NOT collateral. The Gravity a user is paid when their asset is
+// locked is DRAWN from a system pool that already holds MINTED Gravity — never
+// created from thin air. For normal user assets that pool is the Growth pool.
+// (Other asset/value types can map to other pools later; only "normal" today.)
+function sourcePoolFor(_assetType: string): string {
+  return GROWTH_ACCOUNT;
+}
 
 function requireSession(req: any, res: any): boolean {
   if (!req.session?.userId) {
@@ -175,15 +183,25 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
       res.status(400).json({ error: "A positive valuation is required" });
       return;
     }
-    const backingGravity = inrValue / GRAVITY_RATE;
+    const issuedGravity = inrValue / GRAVITY_RATE;
 
-    // Locking a USER asset records its Gravity value in the USERS VAULT (a pool
-    // kept STRUCTURALLY SEPARATE from the System Vault — visible + counted in the
-    // Total Vault but NEVER backs minting) AND issues that same Gravity straight
-    // to the owner's own account (collateral tokenisation). Insert + Users-Vault
-    // bump + owner credit all run atomically. The System Vault and mint gate are
-    // never touched.
+    // When the asset is locked the owner is PAID its Gravity value out of a
+    // system pool that already holds minted Gravity (Growth pool for normal
+    // assets). We lock that pool FOR UPDATE, enforce a strict 0-floor, debit it
+    // and credit the owner — all atomically — so no Gravity is created from thin
+    // air. The asset is NOT collateral; the System Vault, System Core and the
+    // mint gate are never touched.
+    const sourcePool = sourcePoolFor(assetType);
     const entry = await db.transaction(async (tx) => {
+      const [pool] = await tx
+        .select()
+        .from(matrixAccountsTable)
+        .where(eq(matrixAccountsTable.accountNumber, sourcePool))
+        .for("update");
+      if (!pool || Number(pool.gravityBalance) < issuedGravity) {
+        throw new Error("INSUFFICIENT_POOL");
+      }
+
       const [row] = await tx.insert(custodyLedgerTable).values({
         ownerAccount,
         assetType,
@@ -192,24 +210,14 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
         status: "LOCKED",
       }).returning({ id: custodyLedgerTable.id, status: custodyLedgerTable.status, createdAt: custodyLedgerTable.createdAt });
 
-      await adjustBalance(USERS_VAULT, backingGravity.toFixed(6), tx);
-      await logTx(
-        "VAULT_LOCK",
-        `👥 [USERS VAULT LOCK] ${assetType} locked by ${ownerAccount}: +${backingGravity.toFixed(2)} G (does NOT back minting)`,
-        undefined,
-        USERS_VAULT,
-        backingGravity.toFixed(6),
-        tx,
-      );
-
-      // Issue the locked asset's Gravity to the owner's own account.
-      await adjustBalance(ownerAccount, backingGravity.toFixed(6), tx);
+      await adjustBalance(sourcePool, (-issuedGravity).toFixed(6), tx);
+      await adjustBalance(ownerAccount, issuedGravity.toFixed(6), tx);
       await logTx(
         "CUSTODY_ISSUE",
-        `🌌 [CUSTODY ISSUE] +${backingGravity.toFixed(2)} G issued to ${ownerAccount} for locked ${assetType}`,
-        undefined,
+        `🌌 [CUSTODY ISSUE] ${issuedGravity.toFixed(2)} G paid to ${ownerAccount} from Growth pool for locked ${assetType}`,
+        sourcePool,
         ownerAccount,
-        backingGravity.toFixed(6),
+        issuedGravity.toFixed(6),
         tx,
       );
       return row;
@@ -217,14 +225,22 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
 
     res.status(201).json({ entry });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Lock failed" });
+    const msg = err instanceof Error ? err.message : "Lock failed";
+    if (msg === "INSUFFICIENT_POOL") {
+      res.status(400).json({
+        error: "Growth pool has insufficient Gravity to issue for this asset. Mint / top up the Growth pool first.",
+      });
+      return;
+    }
+    res.status(500).json({ error: msg });
   }
 });
 
 // ── POST /api/custody/revalue/:id ──────────────────────────────────────────
 // Founder ONLY — correct the valuation (and optional description) of a custody
-// entry. Moves the USERS VAULT by the delta; never touches the System Vault
-// backing or the mint gate.
+// entry. A higher value pays the extra Gravity to the owner from the Growth
+// pool; a lower value claws the excess back from the owner into the pool. Never
+// touches the System Vault backing or the mint gate.
 router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
   if (!requireSession(req, res)) return;
 
@@ -274,14 +290,47 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
         .where(eq(custodyLedgerTable.id, entryId))
         .returning();
 
-      if (deltaGravity !== 0) {
-        await adjustBalance(USERS_VAULT, deltaGravity.toFixed(6), tx);
+      if (deltaGravity > 0) {
+        // Asset worth more — pay the extra Gravity to the owner from the pool.
+        const pool = sourcePoolFor(entry.assetType);
+        const [src] = await tx
+          .select()
+          .from(matrixAccountsTable)
+          .where(eq(matrixAccountsTable.accountNumber, pool))
+          .for("update");
+        if (!src || Number(src.gravityBalance) < deltaGravity) {
+          throw new Error("INSUFFICIENT_POOL");
+        }
+        await adjustBalance(pool, (-deltaGravity).toFixed(6), tx);
+        await adjustBalance(entry.ownerAccount, deltaGravity.toFixed(6), tx);
         await logTx(
           "VAULT_REVALUE",
-          `✏️ [USERS VAULT REVALUE] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (${deltaGravity >= 0 ? "+" : ""}${deltaGravity.toFixed(2)} G)`,
-          undefined,
-          USERS_VAULT,
+          `✏️ [REVALUE +] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (+${deltaGravity.toFixed(2)} G to ${entry.ownerAccount} from Growth pool)`,
+          pool,
+          entry.ownerAccount,
           deltaGravity.toFixed(6),
+          tx,
+        );
+      } else if (deltaGravity < 0) {
+        // Asset worth less — claw the excess Gravity back from the owner.
+        const pool = sourcePoolFor(entry.assetType);
+        const clawback = -deltaGravity;
+        const [own] = await tx
+          .select()
+          .from(matrixAccountsTable)
+          .where(eq(matrixAccountsTable.accountNumber, entry.ownerAccount))
+          .for("update");
+        if (!own || Number(own.gravityBalance) < clawback) {
+          throw new Error("INSUFFICIENT_OWNER");
+        }
+        await adjustBalance(entry.ownerAccount, (-clawback).toFixed(6), tx);
+        await adjustBalance(pool, clawback.toFixed(6), tx);
+        await logTx(
+          "VAULT_REVALUE",
+          `✏️ [REVALUE −] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (−${clawback.toFixed(2)} G from ${entry.ownerAccount} to Growth pool)`,
+          entry.ownerAccount,
+          pool,
+          clawback.toFixed(6),
           tx,
         );
       }
@@ -306,6 +355,10 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Cannot revalue an escrow entry" });
     } else if (msg.startsWith("NOT_LOCKED:")) {
       res.status(400).json({ error: `Cannot revalue entry with status: ${msg.slice("NOT_LOCKED:".length)}` });
+    } else if (msg === "INSUFFICIENT_POOL") {
+      res.status(400).json({ error: "Growth pool has insufficient Gravity for this revaluation." });
+    } else if (msg === "INSUFFICIENT_OWNER") {
+      res.status(400).json({ error: "Owner's balance is too low to claw back the revaluation difference." });
     } else {
       res.status(500).json({ error: msg });
     }
@@ -360,20 +413,29 @@ router.post("/custody/release/:id", async (req, res): Promise<void> => {
           amount: amount.toFixed(6),
         });
       } else if (!entry.escrowFromAccount && !entry.escrowToAccount) {
-        // Plain asset release — the asset leaves the Users Vault, so pull the
-        // value it contributed back OUT (the exact mirror of the lock that added
-        // it). The Users Vault never backed minting, so the mint gate stays
-        // honest either way.
+        // Plain asset release — the asset leaves custody, so the Gravity issued
+        // to the owner when it was locked is clawed back to the Growth pool (the
+        // exact mirror of the lock). The owner must still hold it.
         const assetVal = parseFloat(decrypt(entry.valuationEncrypted)) || 0;
-        const backingGravity = assetVal / GRAVITY_RATE;
-        if (backingGravity > 0) {
-          await adjustBalance(USERS_VAULT, (-backingGravity).toFixed(6), tx);
+        const issuedGravity = assetVal / GRAVITY_RATE;
+        if (issuedGravity > 0) {
+          const pool = sourcePoolFor(entry.assetType);
+          const [own] = await tx
+            .select()
+            .from(matrixAccountsTable)
+            .where(eq(matrixAccountsTable.accountNumber, entry.ownerAccount))
+            .for("update");
+          if (!own || Number(own.gravityBalance) < issuedGravity) {
+            throw new Error("INSUFFICIENT_OWNER");
+          }
+          await adjustBalance(entry.ownerAccount, (-issuedGravity).toFixed(6), tx);
+          await adjustBalance(pool, issuedGravity.toFixed(6), tx);
           await logTx(
             "VAULT_RELEASE",
-            `🔓 [USERS VAULT RELEASE] entry #${entryId} (${entry.assetType}) released: -${backingGravity.toFixed(2)} G`,
-            USERS_VAULT,
-            undefined,
-            backingGravity.toFixed(6),
+            `🔓 [RELEASE] entry #${entryId} (${entry.assetType}): ${issuedGravity.toFixed(2)} G returned by ${entry.ownerAccount} to Growth pool`,
+            entry.ownerAccount,
+            pool,
+            issuedGravity.toFixed(6),
             tx,
           );
         }
@@ -393,6 +455,10 @@ router.post("/custody/release/:id", async (req, res): Promise<void> => {
     } else if (msg.startsWith("NOT_LOCKED:")) {
       res.status(400).json({
         error: `Cannot release entry with status: ${msg.slice("NOT_LOCKED:".length)}`,
+      });
+    } else if (msg === "INSUFFICIENT_OWNER") {
+      res.status(400).json({
+        error: "Owner no longer holds the issued Gravity, so this asset can't be released until it's returned.",
       });
     } else {
       res.status(500).json({ error: msg });

@@ -135,7 +135,7 @@ export default function VaultPage() {
   const lockMutation = useMutation({
     mutationFn: (body: object) => apiFetch("/api/custody/lock", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
-      toast({ title: "🔒 Asset Locked in Users Vault", description: "Gravity issued to owner account · recorded in Users Vault (does NOT back minting)" });
+      toast({ title: "🔒 Asset Locked", description: "Gravity paid to owner from the Growth pool (asset is not collateral)" });
       setLockForm({ ownerAccount: "", assetType: "", valuation: "", description: "" });
       setLockLocalAmount("");
       qc.invalidateQueries({ queryKey: ["custody-summary"] });

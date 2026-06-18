@@ -1,28 +1,36 @@
 ---
-name: System Vault vs Users Vault — only System Vault backs minting
-description: Custody lock/revalue/release move the Users Vault (visible but never backs mint); only admin approve/deposit move the System Vault; mint draws against the System Vault only, gated 200%.
+name: Custody pays the owner from the Growth pool — asset is NOT collateral
+description: Custody lock/revalue/release move Gravity between the owner and the Growth pool (debit real minted Gravity, never thin-air); the asset is not collateral and the Users Vault is OUT of the custody money flow. Only admin approve/deposit move the System Vault; mint draws against the System Vault only, gated 200%.
 ---
 
-# Two structurally separate vaults; only the System Vault backs minting
+# Custody issuance comes OUT of the Growth pool; the asset is not collateral
 
-There are TWO "Vault"-type system accounts. Do NOT conflate them:
+When a user's asset is locked in custody the owner is PAID its Gravity value
+(`valuation / GRAVITY_RATE`) out of a system pool that already holds **minted**
+Gravity. The asset is **NOT collateral** and **no Gravity is created from thin
+air** — every custody value path debits/credits a real pool.
 
-- **System Vault `000000000001`** (`VAULT_ACCOUNT`) — the ONLY pool that backs minting. Moved by admin **approve** (`POST /admin/assets/:id/approve`) and **deposit** (`POST /admin/assets/:id/deposit`), which add `claimedValue / GRAVITY_RATE` (G) as backing.
-- **Users Vault `000000000002`** (`USERS_VAULT`) — holds user custody-lock value. Visible and counted in the "Total Vault" (System + Users) for DISPLAY only; it NEVER backs minting.
+- **Source pool depends on asset/value type.** Today only "normal" is defined →
+  the **Growth pool `555555555555`** (`GROWTH_ACCOUNT`). `sourcePoolFor(assetType)`
+  in `custody.ts` is the single mapping point; extend it for other types.
+- Custody routes (`artifacts/api-server/src/routes/custody.ts`), all atomic, with
+  the pool/owner row locked `FOR UPDATE` + strict 0-floor (`INSUFFICIENT_POOL` /
+  `INSUFFICIENT_OWNER`):
+  - **Lock**: debit Growth pool, credit owner by `valuation/GRAVITY_RATE`. Logs `CUSTODY_ISSUE`.
+  - **Revalue** (founder-only): delta `(new-old)/RATE` > 0 → pay owner from pool; < 0 → claw back from owner to pool.
+  - **Release** (plain, non-escrow): claw the issued Gravity back from owner → Growth pool (mirror of lock; owner must still hold it). Escrow release keeps its receiver-credit + 1% founder-fee path untouched.
 
-Custody routes (`artifacts/api-server/src/routes/custody.ts`) all move the **Users Vault**, atomically inside their tx:
-- **Lock** (`POST /api/custody/lock`): inserts LOCKED entry AND bumps `USERS_VAULT` by `valuation / GRAVITY_RATE`. Logs `VAULT_LOCK`.
-- **Revalue** (`POST /api/custody/revalue/:id`, founder-only): row FOR UPDATE, moves `USERS_VAULT` by the **delta** `(newVal - oldVal)/GRAVITY_RATE`. Rejects escrow + non-`LOCKED`. Logs `VAULT_REVALUE`.
-- **Release** (`POST /api/custody/release/:id`): plain (non-escrow) asset pulls its value back OUT of `USERS_VAULT` (`-valuation/GRAVITY_RATE`). Escrow releases keep their receiver-credit + 1% founder fee path untouched.
-
-- **Mint** (`POST /api/matrix/mint`): pure DRAW against the **System Vault** only, gated at 200% (`vaultGravity >= VAULT_BACKING_RATIO * coreGravity`, reading System Vault). It does NOT auto-lock or inject backing.
-
-**Why (changed):** the model used to couple custody lock/revalue/release to the System Vault backing — so user custody locks inflated mint capacity. The user split them STRUCTURALLY: a user locking an asset must NOT increase how much the system can mint. Custody value still shows (Total Vault) but mint is gated on the System Vault alone.
+**Why:** user rejected the earlier "credit the Users Vault + mint-free issue to
+the owner against their asset" model — that was thin-air issuance and made the
+asset collateral, which defeats the point of the system minting at all. Issuance
+must come out of already-minted Gravity (Growth pool), not be conjured.
 
 **How to apply:**
-- Custody lock/revalue/release → `USERS_VAULT`. Admin approve/deposit + mint draw → `VAULT_ACCOUNT` (System). Never cross-wire these.
-- Never re-add a `VAULT_ACCOUNT` bump or custody auto-lock to the mint path, and never point custody routes back at `VAULT_ACCOUNT`.
-- `getVaultStatus()` returns `vaultGravity` (System), `usersVaultGravity`, and `totalVaultGravity`; the mint gate reads `vaultGravity` only.
-- `totalDistributedGravity()` excludes BOTH vault accounts + System Core.
-- Frontend (`universe-control-space.tsx`): banner shows System Vault / Users Vault / Total Vault separately; both vaults are in `SYSTEM_CORES` and excluded from transfer/escrow dropdowns (matrix.tsx, vault.tsx, admin.tsx).
-- The vault lock form (vault.tsx) mirrors the mint form's currency selector — pick 🌌 Gravity or any world currency; the typed amount is converted to canonical ₹ in `lockForm.valuation` (server divides by `GRAVITY_RATE`). Live FX via `fetchInrPerUnitRates` with `STATIC_INR_PER_UNIT` fallback.
+- The **Users Vault `000000000002`** (`USERS_VAULT`) is now OUT of the custody
+  money flow — custody routes no longer touch it (it stays 0). Do NOT re-wire
+  custody to credit/debit the Users Vault. `USERS_VAULT` is no longer imported in `custody.ts`.
+- **System Vault `000000000001`** (`VAULT_ACCOUNT`) — still the ONLY mint backing.
+  Moved only by admin **approve** + **deposit**. **Mint** (`POST /api/matrix/mint`)
+  is a pure DRAW against the System Vault, gated 200% (`vaultGravity >= VAULT_BACKING_RATIO * coreGravity`). Never auto-locks/injects backing; never point custody at `VAULT_ACCOUNT`.
+- `getVaultStatus()` still returns `vaultGravity`/`usersVaultGravity`/`totalVaultGravity`; `usersVaultGravity` will read 0 going forward (custody no longer feeds it). Banner still renders all three.
+- The vault lock form (vault.tsx) mirrors the mint form's currency selector; typed amount → canonical ₹ in `lockForm.valuation` (server ÷ `GRAVITY_RATE`).
