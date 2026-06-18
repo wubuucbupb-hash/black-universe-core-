@@ -2,7 +2,13 @@ import { Router } from "express";
 import { db, custodyLedgerTable, matrixAccountsTable, matrixTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { encrypt, decrypt } from "../lib/encryption";
-import { adjustBalance, recordPoolFee } from "../lib/matrixEngine";
+import {
+  adjustBalance,
+  recordPoolFee,
+  logTx,
+  VAULT_ACCOUNT,
+  GRAVITY_RATE,
+} from "../lib/matrixEngine";
 
 const router = Router();
 const FOUNDER_ACCOUNT = "111111111111";
@@ -96,13 +102,36 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
       return;
     }
 
-    const [entry] = await db.insert(custodyLedgerTable).values({
-      ownerAccount,
-      assetType,
-      valuationEncrypted: encrypt(String(valuation)),
-      descriptionEncrypted: encrypt(description),
-      status: "LOCKED",
-    }).returning({ id: custodyLedgerTable.id, status: custodyLedgerTable.status, createdAt: custodyLedgerTable.createdAt });
+    const inrValue = Number(valuation);
+    if (!Number.isFinite(inrValue) || inrValue <= 0) {
+      res.status(400).json({ error: "A positive valuation is required" });
+      return;
+    }
+    const backingGravity = inrValue / GRAVITY_RATE;
+
+    // Locking an asset puts its value INTO the Vault: the asset's Gravity value
+    // is added to VAULT_ACCOUNT backing, which is exactly what the 200% mint gate
+    // reads. Insert + backing bump run atomically so backing never drifts.
+    const entry = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(custodyLedgerTable).values({
+        ownerAccount,
+        assetType,
+        valuationEncrypted: encrypt(String(valuation)),
+        descriptionEncrypted: encrypt(description),
+        status: "LOCKED",
+      }).returning({ id: custodyLedgerTable.id, status: custodyLedgerTable.status, createdAt: custodyLedgerTable.createdAt });
+
+      await adjustBalance(VAULT_ACCOUNT, backingGravity.toFixed(6), tx);
+      await logTx(
+        "VAULT_LOCK",
+        `🏦 [VAULT LOCK] ${assetType} locked by ${ownerAccount}: +${backingGravity.toFixed(2)} G backing`,
+        undefined,
+        VAULT_ACCOUNT,
+        backingGravity.toFixed(6),
+        tx,
+      );
+      return row;
+    });
 
     res.status(201).json({ entry });
   } catch (err: unknown) {
@@ -126,27 +155,56 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
     const entryId = Number(req.params.id);
     const { valuation, description } = req.body;
 
-    if (valuation == null || Number(valuation) <= 0) {
+    const newVal = Number(valuation);
+    if (valuation == null || !Number.isFinite(newVal) || newVal <= 0) {
       res.status(400).json({ error: "A positive valuation is required" });
       return;
     }
 
-    const [updated] = await db
-      .update(custodyLedgerTable)
-      .set({
-        valuationEncrypted: encrypt(String(valuation)),
-        updatedAt: new Date(),
-        ...(typeof description === "string" && description.trim()
-          ? { descriptionEncrypted: encrypt(description) }
-          : {}),
-      })
-      .where(eq(custodyLedgerTable.id, entryId))
-      .returning();
+    // Revaluation moves the Vault backing by the delta (new − old). That is the
+    // whole point of a revalue: the asset is now worth more (or less) AS BACKING,
+    // so the 200% mint gate must see the new value. The row is locked FOR UPDATE
+    // so the value change and the backing move stay consistent.
+    const updated = await db.transaction(async (tx) => {
+      const [entry] = await tx
+        .select()
+        .from(custodyLedgerTable)
+        .where(eq(custodyLedgerTable.id, entryId))
+        .for("update");
 
-    if (!updated) {
-      res.status(404).json({ error: "Custody entry not found" });
-      return;
-    }
+      if (!entry) throw new Error("NOT_FOUND");
+      if (entry.escrowFromAccount || entry.escrowToAccount) throw new Error("IS_ESCROW");
+      if (entry.status !== "LOCKED") throw new Error(`NOT_LOCKED:${entry.status}`);
+
+      const oldVal = parseFloat(decrypt(entry.valuationEncrypted)) || 0;
+      const deltaGravity = (newVal - oldVal) / GRAVITY_RATE;
+
+      const [row] = await tx
+        .update(custodyLedgerTable)
+        .set({
+          valuationEncrypted: encrypt(String(valuation)),
+          updatedAt: new Date(),
+          ...(typeof description === "string" && description.trim()
+            ? { descriptionEncrypted: encrypt(description) }
+            : {}),
+        })
+        .where(eq(custodyLedgerTable.id, entryId))
+        .returning();
+
+      if (deltaGravity !== 0) {
+        await adjustBalance(VAULT_ACCOUNT, deltaGravity.toFixed(6), tx);
+        await logTx(
+          "VAULT_REVALUE",
+          `✏️ [VAULT REVALUE] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (${deltaGravity >= 0 ? "+" : ""}${deltaGravity.toFixed(2)} G backing)`,
+          undefined,
+          VAULT_ACCOUNT,
+          deltaGravity.toFixed(6),
+          tx,
+        );
+      }
+
+      return row;
+    });
 
     res.json({
       entry: {
@@ -158,7 +216,16 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
       },
     });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Revaluation failed" });
+    const msg = err instanceof Error ? err.message : "Revaluation failed";
+    if (msg === "NOT_FOUND") {
+      res.status(404).json({ error: "Custody entry not found" });
+    } else if (msg === "IS_ESCROW") {
+      res.status(400).json({ error: "Cannot revalue an escrow entry" });
+    } else if (msg.startsWith("NOT_LOCKED:")) {
+      res.status(400).json({ error: `Cannot revalue entry with status: ${msg.slice("NOT_LOCKED:".length)}` });
+    } else {
+      res.status(500).json({ error: msg });
+    }
   }
 });
 
@@ -209,6 +276,23 @@ router.post("/custody/release/:id", async (req, res): Promise<void> => {
           toAccount: entry.escrowToAccount,
           amount: amount.toFixed(6),
         });
+      } else if (!entry.escrowFromAccount && !entry.escrowToAccount) {
+        // Plain asset release — the asset leaves the Vault, so pull the value it
+        // contributed back OUT of the backing (the exact mirror of the lock that
+        // added it). Keeps VAULT_ACCOUNT and the 200% mint gate honest.
+        const assetVal = parseFloat(decrypt(entry.valuationEncrypted)) || 0;
+        const backingGravity = assetVal / GRAVITY_RATE;
+        if (backingGravity > 0) {
+          await adjustBalance(VAULT_ACCOUNT, (-backingGravity).toFixed(6), tx);
+          await logTx(
+            "VAULT_RELEASE",
+            `🔓 [VAULT RELEASE] entry #${entryId} (${entry.assetType}) released: -${backingGravity.toFixed(2)} G backing`,
+            VAULT_ACCOUNT,
+            undefined,
+            backingGravity.toFixed(6),
+            tx,
+          );
+        }
       }
 
       await tx

@@ -2,7 +2,6 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import {
   assetsTable,
-  custodyLedgerTable,
   db,
   matrixAccountsTable,
   matrixTransactionsTable,
@@ -23,7 +22,6 @@ import {
   mintGravity,
   recordPoolFee,
 } from "../lib/matrixEngine";
-import { encrypt } from "../lib/encryption";
 
 const router = Router();
 
@@ -167,24 +165,6 @@ router.post("/matrix/mint", async (req, res): Promise<void> => {
           status: "minted",
           mintedAt: new Date(),
           gravityIssued: String(gravityTotal),
-        });
-
-        // Auto-lock the minted asset into the custody vault registry so it is
-        // visible in the Vault ledger. Registry-only: this does NOT touch the
-        // VAULT_ACCOUNT backing balance or the 200% mint gate.
-        await db.insert(custodyLedgerTable).values({
-          ownerAccount: FOUNDER_ACCOUNT,
-          assetType:
-            typeof assetType === "string" && assetType.trim()
-              ? assetType
-              : "real_estate",
-          valuationEncrypted: encrypt(String(inrValue)),
-          descriptionEncrypted: encrypt(
-            typeof description === "string" && description.trim()
-              ? `${assetTitle} — ${description}`
-              : String(assetTitle),
-          ),
-          status: "LOCKED",
         });
       }
     }

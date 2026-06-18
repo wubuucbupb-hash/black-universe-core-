@@ -1,8 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import {
+  GRAVITY_RATE,
+  STATIC_INR_PER_UNIT,
+  currencyOptions,
+  currencySymbol,
+  fetchInrPerUnitRates,
+} from "@/lib/currency";
+import { GRAVITY } from "@/components/currency-provider";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -42,6 +50,26 @@ export default function VaultPage() {
   const [lockForm, setLockForm] = useState({ ownerAccount: "", assetType: "", valuation: "", description: "" });
   const [revalueId, setRevalueId] = useState<number | null>(null);
   const [revalueValue, setRevalueValue] = useState("");
+
+  // Asset-declaration style valuation: pick 🌌 Gravity or ANY world currency. The
+  // typed amount is converted to its canonical ₹ value (lockForm.valuation); the
+  // server then turns that into Vault backing (value ÷ ₹10,000 = Gravity).
+  const [lockCurrency, setLockCurrency] = useState("INR");
+  const [lockLocalAmount, setLockLocalAmount] = useState("");
+  const [rates, setRates] = useState<Record<string, number>>(STATIC_INR_PER_UNIT);
+  useEffect(() => {
+    fetchInrPerUnitRates().then(setRates).catch(() => {});
+  }, []);
+  const currencyOpts = useMemo(() => currencyOptions(), []);
+  const lockIsGravity = lockCurrency === GRAVITY;
+  const lockSymbol = lockIsGravity ? "G" : currencySymbol(lockCurrency);
+  const lockFxRate = lockIsGravity
+    ? GRAVITY_RATE
+    : rates[lockCurrency] ?? STATIC_INR_PER_UNIT[lockCurrency];
+  const lockRateKnown =
+    lockIsGravity || (typeof lockFxRate === "number" && lockFxRate > 0);
+  const lockGravityPreview =
+    Number(lockForm.valuation) > 0 ? Number(lockForm.valuation) / GRAVITY_RATE : 0;
 
   const isAdmin = user?.role === "admin";
 
@@ -96,8 +124,9 @@ export default function VaultPage() {
   const lockMutation = useMutation({
     mutationFn: (body: object) => apiFetch("/api/custody/lock", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
-      toast({ title: "🔒 Asset Locked in Vault", description: "Asset custody entry created" });
+      toast({ title: "🔒 Asset Locked in Vault", description: "Value added to Vault backing" });
       setLockForm({ ownerAccount: "", assetType: "", valuation: "", description: "" });
+      setLockLocalAmount("");
       qc.invalidateQueries({ queryKey: ["custody-summary"] });
       qc.invalidateQueries({ queryKey: ["custody-vault"] });
     },
@@ -246,10 +275,66 @@ export default function VaultPage() {
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="text-zinc-400 text-xs font-mono">Valuation (₹ INR)</label>
-                  <input type="number" min="0" placeholder="0.00" value={lockForm.valuation}
-                    onChange={(e) => setLockForm({ ...lockForm, valuation: e.target.value })}
-                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none" />
+                  <label className="text-zinc-400 text-xs font-mono">Asset Valuation ({lockSymbol})</label>
+                  <div className="flex gap-2 mt-1">
+                    <select
+                      value={lockCurrency}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setLockCurrency(next);
+                        const nextRate =
+                          next === GRAVITY
+                            ? GRAVITY_RATE
+                            : rates[next] ?? STATIC_INR_PER_UNIT[next];
+                        setLockLocalAmount(
+                          lockForm.valuation && nextRate
+                            ? String(Number(lockForm.valuation) / nextRate)
+                            : "",
+                        );
+                      }}
+                      className="bg-black border border-zinc-700 rounded-md px-2 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none max-w-[8rem]"
+                    >
+                      <option value={GRAVITY}>🌌 Gravity (G)</option>
+                      {currencyOpts.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="e.g., 5000000"
+                      value={lockLocalAmount}
+                      disabled={!lockRateKnown}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLockLocalAmount(v);
+                        setLockForm((f) => ({
+                          ...f,
+                          valuation:
+                            v && lockRateKnown ? String(Number(v) * lockFxRate) : "",
+                        }));
+                      }}
+                      className="flex-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+                    />
+                  </div>
+                  {!lockRateKnown && (
+                    <p className="text-amber-500/80 text-[11px] mt-1 font-mono">
+                      Live rate for {lockCurrency} unavailable — pick another currency or Gravity.
+                    </p>
+                  )}
+                  {!lockIsGravity && lockCurrency !== "INR" && lockGravityPreview > 0 && (
+                    <p className="text-zinc-500 text-[11px] mt-1 font-mono">
+                      ≈ ₹{fmt(Number(lockForm.valuation))} INR backing
+                    </p>
+                  )}
+                  {lockGravityPreview > 0 && (
+                    <p className="text-cyan-400 text-xs mt-1 font-mono">
+                      🏦 Adds {fmt(lockGravityPreview)} G to Vault backing
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">Description (Encrypted in DB)</label>
@@ -257,7 +342,7 @@ export default function VaultPage() {
                     onChange={(e) => setLockForm({ ...lockForm, description: e.target.value })} rows={2}
                     className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none resize-none" />
                 </div>
-                <button onClick={() => lockMutation.mutate(lockForm)} disabled={lockMutation.isPending}
+                <button onClick={() => lockMutation.mutate(lockForm)} disabled={lockMutation.isPending || !lockForm.valuation}
                   className="w-full py-3 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white font-bold rounded-md transition-all text-sm">
                   {lockMutation.isPending ? "⏳ LOCKING..." : "🏦 LOCK ASSET IN VAULT"}
                 </button>
