@@ -9,7 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import { ObjectUploader } from "@workspace/object-storage-web";
 import type { UploadResult } from "@uppy/core";
-import { FileText, X, CheckCircle2 } from "lucide-react";
+import { FileText, X, CheckCircle2, Receipt } from "lucide-react";
 import {
   GRAVITY_RATE,
   STATIC_INR_PER_UNIT,
@@ -18,7 +18,7 @@ import {
   detectDefaultCurrency,
   fetchInrPerUnitRates,
 } from "@/lib/currency";
-import { GRAVITY } from "@/components/currency-provider";
+import { GRAVITY, useCurrency, CurrencySelect } from "@/components/currency-provider";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -58,6 +58,7 @@ export default function MatrixEngine() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
+  const { format } = useCurrency();
 
   const isAdmin = user?.role === "admin";
 
@@ -1133,9 +1134,12 @@ export default function MatrixEngine() {
         <div className="lg:w-[420px] space-y-4">
           {/* My Transaction History */}
           <div className="bg-[#0F172A] border border-zinc-700/50 rounded-xl p-4 font-mono">
-            <h2 className="text-cyan-400 font-bold text-sm tracking-widest mb-3">
-              📊 MY TRANSACTION HISTORY
-            </h2>
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <h2 className="flex items-center gap-1.5 text-cyan-400 font-bold text-sm tracking-widest">
+                <Receipt className="h-4 w-4" /> MY TRANSACTION HISTORY
+              </h2>
+              <CurrencySelect className="bg-black border border-zinc-700 text-zinc-300 text-[10px] font-mono rounded px-1.5 py-0.5 focus:border-cyan-500 focus:outline-none max-w-[130px]" />
+            </div>
             {!user ? (
               <div className="text-zinc-600 text-xs">
                 Login to view your transactions
@@ -1150,25 +1154,41 @@ export default function MatrixEngine() {
                   return (
                     <div
                       key={tx.id}
-                      className={`border-l-2 pl-3 py-1 ${
-                        out ? "border-red-500" : "border-green-500"
+                      className={`rounded-lg border px-3 py-2 ${
+                        out
+                          ? "border-red-500/20 bg-red-500/[0.03]"
+                          : "border-green-500/20 bg-green-500/[0.03]"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span
-                          className={`text-[11px] font-bold ${
+                          className={`text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded ${
+                            out
+                              ? "bg-red-500/10 text-red-400"
+                              : "bg-green-500/10 text-green-400"
+                          }`}
+                        >
+                          {out ? "DEBIT" : "CREDIT"}
+                        </span>
+                        <span
+                          className={`text-sm font-bold tabular-nums ${
                             out ? "text-red-400" : "text-green-400"
                           }`}
                         >
-                          {out ? "▲ SENT" : "▼ RECEIVED"}
-                        </span>
-                        <span className="text-white text-sm font-bold">
-                          {fmt(tx.amount ?? 0)} G
+                          {out ? "− " : "+ "}
+                          {format(tx.amount ?? 0)}
                         </span>
                       </div>
-                      <div className="text-zinc-500 text-[10px]">
-                        {out ? "To" : "From"} {counterparty ?? "—"} ·{" "}
-                        {fmtDate(tx.createdAt)}
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-zinc-400 text-[10px]">
+                          {out ? "To" : "From"} {counterparty ?? "—"}
+                        </span>
+                        <span className="text-zinc-600 text-[9px]">
+                          {fmtDate(tx.createdAt)}
+                        </span>
+                      </div>
+                      <div className="text-zinc-600 text-[9px] tracking-wide mt-0.5">
+                        Ref: TXN-{String(tx.id).padStart(6, "0")}
                       </div>
                     </div>
                   );

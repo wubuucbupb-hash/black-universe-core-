@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { GRAVITY_RATE } from "@/lib/currency";
+import { useCurrency, CurrencySelect } from "@/components/currency-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,7 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { format } = useCurrency();
 
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -1117,8 +1119,9 @@ export default function Admin() {
 
           {/* ── TRANSACTIONS TAB ── */}
           <TabsContent value="txns" className="rounded-xl overflow-hidden border border-zinc-800">
-            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+            <div className="bg-black px-4 py-2 flex items-center justify-between gap-2 border-b border-zinc-800">
               <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">⚡ MATRIX TRANSACTION LOG — {txnLogs.length} RECORDS</span>
+              <CurrencySelect className="bg-black border border-zinc-700 text-zinc-300 text-[10px] font-mono rounded px-1.5 py-0.5 focus:border-cyan-500 focus:outline-none max-w-[150px]" />
             </div>
             <div className="bg-[#0a0a0a] overflow-x-auto">
               {txnLogs.length === 0 ? (
@@ -1131,7 +1134,7 @@ export default function Admin() {
                       <th className="text-left px-4 py-2">TYPE</th>
                       <th className="text-left px-4 py-2">FROM</th>
                       <th className="text-left px-4 py-2">TO</th>
-                      <th className="text-right px-4 py-2">AMOUNT (G)</th>
+                      <th className="text-right px-4 py-2">AMOUNT</th>
                       <th className="text-left px-4 py-2">NOTE</th>
                       <th className="text-left px-4 py-2">DATE</th>
                       <th className="text-left px-4 py-2">ACTION</th>
@@ -1148,7 +1151,7 @@ export default function Admin() {
                         </td>
                         <td className="px-4 py-2 text-zinc-400">{t.fromAccount ?? "SYSTEM"}</td>
                         <td className="px-4 py-2 text-zinc-400">{t.toAccount ?? "—"}</td>
-                        <td className="px-4 py-2 text-right text-green-400 font-bold">{fmtG(t.amount)}</td>
+                        <td className="px-4 py-2 text-right text-green-400 font-bold tabular-nums">{format(t.amount ?? 0)}</td>
                         <td className="px-4 py-2 text-zinc-500 max-w-[160px] truncate">{t.description ?? "—"}</td>
                         <td className="px-4 py-2 text-zinc-600">{t.createdAt ? new Date(t.createdAt).toLocaleDateString("en-IN") : "—"}</td>
                         <td className="px-4 py-2">
