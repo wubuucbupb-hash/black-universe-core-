@@ -239,8 +239,10 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
 // ── POST /api/custody/revalue/:id ──────────────────────────────────────────
 // Founder ONLY — correct the valuation (and optional description) of a custody
 // entry. A higher value pays the extra Gravity to the owner from the Growth
-// pool; a lower value claws the excess back from the owner into the pool. Never
-// touches the System Vault backing or the mint gate.
+// pool. A LOWER value only updates the recorded valuation — it NEVER claws
+// Gravity back from the owner, because a fall in the asset's value does not
+// depend on the owner (the Gravity already paid stays with them). Never touches
+// the System Vault backing or the mint gate.
 router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
   if (!requireSession(req, res)) return;
 
@@ -260,10 +262,11 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
       return;
     }
 
-    // Revaluation moves the USERS VAULT value by the delta (new − old): the asset
-    // is now worth more (or less). The Users Vault never backs minting, so the
-    // mint gate is unaffected. The row is locked FOR UPDATE so the value change
-    // and the Users-Vault move stay consistent.
+    // Revaluation: if the asset is worth MORE, pay the extra Gravity to the owner
+    // from the Growth pool. If it is worth LESS, only the recorded valuation
+    // changes — no Gravity is clawed back (a value fall is not the owner's
+    // doing). The row is locked FOR UPDATE so the value change and any pool move
+    // stay consistent.
     const updated = await db.transaction(async (tx) => {
       const [entry] = await tx
         .select()
@@ -312,25 +315,15 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
           tx,
         );
       } else if (deltaGravity < 0) {
-        // Asset worth less — claw the excess Gravity back from the owner.
-        const pool = sourcePoolFor(entry.assetType);
-        const clawback = -deltaGravity;
-        const [own] = await tx
-          .select()
-          .from(matrixAccountsTable)
-          .where(eq(matrixAccountsTable.accountNumber, entry.ownerAccount))
-          .for("update");
-        if (!own || Number(own.gravityBalance) < clawback) {
-          throw new Error("INSUFFICIENT_OWNER");
-        }
-        await adjustBalance(entry.ownerAccount, (-clawback).toFixed(6), tx);
-        await adjustBalance(pool, clawback.toFixed(6), tx);
+        // Asset worth less — only the recorded valuation is updated above. No
+        // Gravity is clawed back from the owner: a fall in the asset's value
+        // does not depend on the owner, so what was already paid stays theirs.
         await logTx(
           "VAULT_REVALUE",
-          `✏️ [REVALUE −] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (−${clawback.toFixed(2)} G from ${entry.ownerAccount} to Growth pool)`,
+          `✏️ [REVALUE −] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (valuation lowered; no Gravity clawed back from ${entry.ownerAccount})`,
           entry.ownerAccount,
-          pool,
-          clawback.toFixed(6),
+          entry.ownerAccount,
+          "0.000000",
           tx,
         );
       }
@@ -357,8 +350,6 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
       res.status(400).json({ error: `Cannot revalue entry with status: ${msg.slice("NOT_LOCKED:".length)}` });
     } else if (msg === "INSUFFICIENT_POOL") {
       res.status(400).json({ error: "Growth pool has insufficient Gravity for this revaluation." });
-    } else if (msg === "INSUFFICIENT_OWNER") {
-      res.status(400).json({ error: "Owner's balance is too low to claw back the revaluation difference." });
     } else {
       res.status(500).json({ error: msg });
     }

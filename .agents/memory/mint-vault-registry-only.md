@@ -17,7 +17,7 @@ air** — every custody value path debits/credits a real pool.
   the pool/owner row locked `FOR UPDATE` + strict 0-floor (`INSUFFICIENT_POOL` /
   `INSUFFICIENT_OWNER`):
   - **Lock**: debit Growth pool, credit owner by `valuation/GRAVITY_RATE`. Logs `CUSTODY_ISSUE`.
-  - **Revalue** (founder-only): delta `(new-old)/RATE` > 0 → pay owner from pool; < 0 → claw back from owner to pool.
+  - **Revalue** (founder-only): delta `(new-old)/RATE` > 0 → pay owner the extra from the pool. delta < 0 → ONLY update the recorded valuation, **never claw back from the owner** (a value fall is not the owner's doing; what was paid stays theirs). Revalue no longer throws `INSUFFICIENT_OWNER`.
   - **Release** (plain, non-escrow): claw the issued Gravity back from owner → Growth pool (mirror of lock; owner must still hold it). Escrow release keeps its receiver-credit + 1% founder-fee path untouched.
 
 **Why:** user rejected the earlier "credit the Users Vault + mint-free issue to
