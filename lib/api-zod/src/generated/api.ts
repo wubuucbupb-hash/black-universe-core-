@@ -89,7 +89,7 @@ export const ListMyAssetsResponseItem = zod.object({
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
   "documentUrls": zod.array(zod.string()).optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
   "mintedAt": zod.coerce.date().nullish(),
@@ -132,7 +132,7 @@ export const GetAssetResponse = zod.object({
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
   "documentUrls": zod.array(zod.string()).optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
   "mintedAt": zod.coerce.date().nullish(),
@@ -186,7 +186,7 @@ export const GetMatrixAccountsResponse = zod.object({
  * @summary Admin - list all assets with optional status filter
  */
 export const AdminListAssetsQueryParams = zod.object({
-  "status": zod.enum(['pending', 'approved', 'rejected']).optional()
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']).optional()
 })
 
 export const AdminListAssetsResponseItem = zod.object({
@@ -197,7 +197,7 @@ export const AdminListAssetsResponseItem = zod.object({
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
   "documentUrls": zod.array(zod.string()).optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
   "mintedAt": zod.coerce.date().nullish(),
@@ -225,7 +225,7 @@ export const ApproveAssetResponse = zod.object({
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
   "documentUrls": zod.array(zod.string()).optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
   "mintedAt": zod.coerce.date().nullish(),
@@ -258,7 +258,7 @@ export const RejectAssetResponse = zod.object({
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
   "documentUrls": zod.array(zod.string()).optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
   "mintedAt": zod.coerce.date().nullish(),
@@ -283,7 +283,32 @@ export const DepositAssetResponse = zod.object({
   "description": zod.string(),
   "documentNote": zod.string().nullish(),
   "documentUrls": zod.array(zod.string()).optional(),
-  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
+  "feeAmount": zod.number().nullish(),
+  "rejectionReason": zod.string().nullish(),
+  "mintedAt": zod.coerce.date().nullish(),
+  "gravityIssued": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Admin - mint Gravity for an approved (Vault-locked) asset
+ */
+export const MintAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const MintAssetResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "assetType": zod.string(),
+  "claimedValue": zod.number(),
+  "description": zod.string(),
+  "documentNote": zod.string().nullish(),
+  "documentUrls": zod.array(zod.string()).optional(),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'minted']),
   "feeAmount": zod.number().nullish(),
   "rejectionReason": zod.string().nullish(),
   "mintedAt": zod.coerce.date().nullish(),

@@ -20,14 +20,16 @@ export const STABILITY_ACCOUNT = "333333333333";
 export const SECURITY_ACCOUNT = "444444444444";
 export const GROWTH_ACCOUNT = "555555555555";
 
-// The Vault holds the real-world ₹ value backing the gravity supply. It is kept
-// SEPARATE from System Core (which holds the total minted Gravity). At all times
-// the vault must hold at least 200% of the System Core gravity value.
+// The Vault holds the Gravity backing the supply. It is kept SEPARATE from
+// System Core (which holds the minted Gravity routed for distribution). Each
+// approved asset locks its FULL Gravity value into the Vault; minting then
+// creates a MATCHING amount in System Core — so Vault and Core grow 1:1 (the
+// asset value exists twice = 200% total creation), and Core never exceeds Vault.
 export const VAULT_ACCOUNT = "000000000001";
 // ₹ value represented by one unit of Gravity (₹10,000 = 1 G).
 export const GRAVITY_RATE = 10000;
-// Required over-collateralization: vault value must be ≥ 200% of gravity value.
-export const VAULT_BACKING_RATIO = 2;
+// Backing floor: System Core gravity must never exceed Vault gravity (1:1).
+export const VAULT_BACKING_RATIO = 1;
 // Black Universe Equity price: how many Gravity buys ONE BU Equity unit.
 // Change this single constant to re-price equity.
 export const EQUITY_PRICE_GRAVITY = 100;
@@ -171,7 +173,7 @@ export interface VaultStatus {
 }
 
 // Reads the live Vault and System Core balances (both in Gravity) and derives
-// the 200% backing health. Single source of truth for the mint guard and the UI.
+// the 1:1 backing health. Single source of truth for the mint guard and the UI.
 export async function getVaultStatus(
   exec: DbExecutor = db,
 ): Promise<VaultStatus> {
@@ -236,18 +238,19 @@ export interface MintResult {
 }
 
 /**
- * Mints gravity, gated by the 200% Vault backing rule.
+ * Mints gravity, gated by the 1:1 Vault backing rule.
  *
- * The Vault (a separate account) holds Gravity that backs the system. System
- * Core holds the total minted Gravity. Before any gravity is created, the Vault
- * must hold at least 200% of the resulting System Core gravity — otherwise the
- * mint is rejected. Assets are deposited into the Vault separately (see the asset
- * deposit route); minting here does NOT add backing, it only issues gravity.
+ * The Vault (a separate account) holds the Gravity that backs the system; each
+ * approved asset locks its full value into the Vault. System Core holds the
+ * minted Gravity that gets distributed. Minting creates a MATCHING amount in
+ * System Core (so Vault and Core stay 1:1) — minting here does NOT add backing,
+ * it only issues the distribution-side gravity against the Vault that the asset
+ * approval already locked.
  *
- * 1. Guard: vaultGravity ≥ 200% × (coreGravity + newGravity).
- * 2. The newly minted gravity is recorded in System Core (the total supply).
+ * 1. Guard: vaultGravity ≥ (coreGravity + newGravity)  (Core never exceeds Vault).
+ * 2. The newly minted gravity is recorded in System Core (the distribution side).
  * 3. It is split across the pools: Founder 1%, Reserve 24%, Stability 25%,
- *    Security 25%, Growth 25%. The growth share lands in `targetWallet`.
+ *    Security 25%, Growth 25%. Only the growth share flows out, to `targetWallet`.
  */
 export async function mintGravity(
   params: {
@@ -261,14 +264,14 @@ export async function mintGravity(
 
   const gravityTotal = inrValue / GRAVITY_RATE;
 
-  // Step 0: 200% Vault backing guard. After this mint, the vault must still hold
-  // at least twice the System Core gravity value.
+  // Step 0: 1:1 Vault backing guard. After this mint, System Core must still be
+  // fully backed — the Vault must hold at least as much Gravity as the new Core.
   const status = await getVaultStatus(exec);
   const newCoreGravity = status.coreGravity + gravityTotal;
   const requiredVault = newCoreGravity * VAULT_BACKING_RATIO;
   if (status.vaultGravity < requiredVault) {
     throw new Error(
-      `INSUFFICIENT_VAULT_BACKING: Minting ${gravityTotal.toFixed(2)} G requires the Vault to hold ${requiredVault.toFixed(2)} G (200% backing), but the Vault holds only ${status.vaultGravity.toFixed(2)} G. Top up the Vault first.`,
+      `INSUFFICIENT_VAULT_BACKING: Minting ${gravityTotal.toFixed(2)} G needs the Vault to hold ${requiredVault.toFixed(2)} G of backing (1:1), but the Vault holds only ${status.vaultGravity.toFixed(2)} G. Lock more asset backing into the Vault first.`,
     );
   }
 
@@ -290,7 +293,7 @@ export async function mintGravity(
 
   await logTx(
     "MINT",
-    `🌌 [MINT] ${gravityTotal.toFixed(2)} Gravity minted for "${assetTitle}" (Vault-backed ≥200%)`,
+    `🌌 [MINT] ${gravityTotal.toFixed(2)} Gravity minted for "${assetTitle}" (Vault-backed 1:1)`,
     undefined,
     SYSTEM_MAIN,
     gravityTotal.toFixed(6),

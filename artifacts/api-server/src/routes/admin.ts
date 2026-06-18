@@ -20,9 +20,11 @@ import {
   ensureUserMatrixAccount,
   adjustBalance,
   logTx,
+  mintGravity,
   VAULT_ACCOUNT,
   GRAVITY_RATE,
   RESERVE_ACCOUNT,
+  GROWTH_ACCOUNT,
 } from "../lib/matrixEngine";
 import { encrypt } from "../lib/encryption";
 
@@ -131,9 +133,10 @@ router.post("/admin/assets/:id/approve", async (req, res): Promise<void> => {
   try {
     const result = await db.transaction(async (tx) => {
       // Atomic claim: only one request flips a pending asset to approved+locked.
+      // mintedAt stays NULL here — it is set by the separate mint step.
       const [claimed] = await tx
         .update(assetsTable)
-        .set({ status: "approved", mintedAt: new Date() })
+        .set({ status: "approved" })
         .where(
           and(
             eq(assetsTable.id, id),
@@ -154,7 +157,7 @@ router.post("/admin/assets/:id/approve", async (req, res): Promise<void> => {
       const vaultGravity = claimedValue / GRAVITY_RATE;
 
       // The asset's value backs the Vault, counted in Gravity. Gravity is NOT
-      // minted here — minting stays a separate, Vault-gated (200%) action.
+      // minted here — minting stays a separate, Vault-gated (1:1) action.
       await adjustBalance(VAULT_ACCOUNT, vaultGravity.toFixed(6), tx);
       await logTx(
         "DEPOSIT",
@@ -204,6 +207,99 @@ router.post("/admin/assets/:id/approve", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err, assetId: id }, "Approve+lock failed; transaction rolled back");
     res.status(500).json({ error: "Approve failed" });
+  }
+});
+
+// Minting an approved (Vault-locked) asset creates the MATCHING Gravity in
+// System Core — 1:1 with the Vault backing that approval already locked, so the
+// asset value now exists twice (200% total creation). That System Core gravity
+// is then distributed: Founder 1%, Reserve 24%, Stability 25%, Security 25%,
+// Growth 25% — and only the Growth share flows OUT to the Growth Pool. Gated so
+// System Core can never exceed the Vault backing.
+router.post("/admin/assets/:id/mint", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
+
+  const id = parseInt(req.params.id);
+  const [asset] = await db
+    .select()
+    .from(assetsTable)
+    .where(eq(assetsTable.id, id))
+    .limit(1);
+
+  if (!asset) {
+    res.status(404).json({ error: "Asset not found" });
+    return;
+  }
+
+  if (asset.status !== "approved") {
+    res
+      .status(409)
+      .json({ error: "Only approved (Vault-locked) assets can be minted" });
+    return;
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Atomic claim: only one request flips an approved asset to minted.
+      const [claimed] = await tx
+        .update(assetsTable)
+        .set({ status: "minted", mintedAt: new Date() })
+        .where(and(eq(assetsTable.id, id), eq(assetsTable.status, "approved")))
+        .returning();
+
+      // Lost the race (another request already minted it).
+      if (!claimed) return null;
+
+      const inrValue = parseFloat(claimed.claimedValue);
+      // Issues gravity into System Core (1:1 vs Vault) and distributes it; the
+      // Growth 25% lands in the Growth Pool. Throws if Vault backing is short.
+      const { gravityTotal, splits } = await mintGravity(
+        {
+          inrValue,
+          assetTitle: claimed.description,
+          targetWallet: GROWTH_ACCOUNT,
+        },
+        tx,
+      );
+
+      const [updated] = await tx
+        .update(assetsTable)
+        .set({ gravityIssued: gravityTotal.toFixed(6) })
+        .where(eq(assetsTable.id, id))
+        .returning();
+
+      return { updated, gravityTotal, splits };
+    });
+
+    if (!result) {
+      res.status(409).json({ error: "Asset has already been processed" });
+      return;
+    }
+
+    req.log.info(
+      { assetId: id, gravityTotal: result.gravityTotal },
+      "Asset minted: matching Gravity created in System Core and distributed",
+    );
+
+    const { updated } = result;
+    res.json({
+      ...updated,
+      claimedValue: parseFloat(updated.claimedValue),
+      feeAmount: updated.feeAmount != null ? parseFloat(updated.feeAmount) : null,
+      gravityIssued:
+        updated.gravityIssued != null ? parseFloat(updated.gravityIssued) : null,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.startsWith("INSUFFICIENT_VAULT_BACKING")) {
+      req.log.warn({ assetId: id }, "Mint blocked: insufficient Vault backing");
+      res
+        .status(409)
+        .json({ error: msg.replace("INSUFFICIENT_VAULT_BACKING: ", "") });
+      return;
+    }
+    req.log.error({ err, assetId: id }, "Mint failed; transaction rolled back");
+    res.status(500).json({ error: "Mint failed" });
   }
 });
 

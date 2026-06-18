@@ -13,4 +13,5 @@ export const AssetStatus = {
   pending: 'pending',
   approved: 'approved',
   rejected: 'rejected',
+  minted: 'minted',
 } as const;

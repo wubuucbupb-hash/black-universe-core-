@@ -245,7 +245,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, approved, rejected]
+            enum: [pending, approved, rejected, minted]
       responses:
         "200":
           description: All assets
@@ -326,6 +326,37 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Asset not approved or already deposited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/assets/{id}/mint:
+    post:
+      operationId: mintAsset
+      tags: [admin]
+      summary: Admin - mint Gravity for an approved (Vault-locked) asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Asset minted and Gravity issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Asset not approved, already minted, or insufficient Vault backing
           content:
             application/json:
               schema:
@@ -576,7 +607,7 @@ components:
             type: string
         status:
           type: string
-          enum: [pending, approved, rejected]
+          enum: [pending, approved, rejected, minted]
         feeAmount:
           type: ["number", "null"]
         rejectionReason:
@@ -615,7 +646,7 @@ components:
             type: string
         status:
           type: string
-          enum: [pending, approved, rejected]
+          enum: [pending, approved, rejected, minted]
         feeAmount:
           type: ["number", "null"]
         rejectionReason:

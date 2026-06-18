@@ -118,6 +118,7 @@ export const AssetStatus = {
   pending: 'pending',
   approved: 'approved',
   rejected: 'rejected',
+  minted: 'minted',
 } as const;
 
 export interface Asset {
@@ -149,6 +150,7 @@ export const AssetWithUserStatus = {
   pending: 'pending',
   approved: 'approved',
   rejected: 'rejected',
+  minted: 'minted',
 } as const;
 
 export interface AssetWithUser {
@@ -234,5 +236,6 @@ export const AdminListAssetsStatus = {
   pending: 'pending',
   approved: 'approved',
   rejected: 'rejected',
+  minted: 'minted',
 } as const;
 

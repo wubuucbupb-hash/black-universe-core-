@@ -1163,6 +1163,76 @@ export const useDepositAsset = <TError = ErrorType<ErrorResponse>,
       return useMutation(getDepositAssetMutationOptions(options));
     }
 
+export const getMintAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/assets/${id}/mint`
+}
+
+/**
+ * @summary Admin - mint Gravity for an approved (Vault-locked) asset
+ */
+export const mintAsset = async (id: number, options?: RequestInit): Promise<Asset> => {
+
+  return customFetch<Asset>(getMintAssetUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getMintAssetMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mintAsset>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof mintAsset>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['mintAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mintAsset>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  mintAsset(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MintAssetMutationResult = NonNullable<Awaited<ReturnType<typeof mintAsset>>>
+
+    export type MintAssetMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Admin - mint Gravity for an approved (Vault-locked) asset
+ */
+export const useMintAsset = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mintAsset>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof mintAsset>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getMintAssetMutationOptions(options));
+    }
+
 export const getGetAdminStatsUrl = () => {
 
 

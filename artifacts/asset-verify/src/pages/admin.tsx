@@ -9,6 +9,7 @@ import {
   useApproveAsset,
   useRejectAsset,
   useDepositAsset,
+  useMintAsset,
   useAdminListUsers,
   getAdminListUsersQueryKey,
 } from "@workspace/api-client-react";
@@ -125,6 +126,7 @@ export default function Admin() {
   const approveAsset = useApproveAsset();
   const rejectAsset = useRejectAsset();
   const depositAsset = useDepositAsset();
+  const mintAsset = useMintAsset();
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -293,6 +295,37 @@ export default function Admin() {
           toast({
             title: "Error",
             description: msg || "Failed to deposit asset.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
+  const handleMint = (id: number) => {
+    mintAsset.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({
+            queryKey: getAdminListAssetsQueryKey(),
+          });
+          queryClient.invalidateQueries({
+            queryKey: getGetAdminStatsQueryKey(),
+          });
+          queryClient.invalidateQueries({ queryKey: ["admin-matrix-accounts"] });
+          queryClient.invalidateQueries({ queryKey: ["admin-matrix-txns"] });
+          toast({
+            title: "Gravity Minted",
+            description:
+              "Matching Gravity created in System Core (1:1) and distributed; Growth 25% sent to the Growth Pool.",
+          });
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { error?: string })?.error;
+          toast({
+            title: "Mint Failed",
+            description: msg || "Failed to mint Gravity for this asset.",
             variant: "destructive",
           });
         },
@@ -520,6 +553,8 @@ export default function Admin() {
     switch (status) {
       case "approved":
         return <Badge className="bg-green-600">Verified</Badge>;
+      case "minted":
+        return <Badge className="bg-purple-600">Minted</Badge>;
       case "rejected":
         return <Badge variant="destructive">Rejected</Badge>;
       default:
@@ -723,11 +758,18 @@ export default function Admin() {
                         <td className="px-4 py-2 align-top">
                           <div className="flex flex-col gap-1">
                             {getStatusBadge(asset.status)}
-                            {asset.mintedAt && (
+                            {(asset.status === "approved" ||
+                              asset.status === "minted") && (
                               <Badge className="bg-cyan-600 hover:bg-cyan-700 w-fit">
                                 🔒 Vault-Locked · {format(Number(asset.claimedValue) / GRAVITY_RATE)}
                               </Badge>
                             )}
+                            {asset.status === "minted" &&
+                              asset.gravityIssued != null && (
+                                <Badge className="bg-purple-600 hover:bg-purple-700 w-fit">
+                                  🌌 Minted · {Number(asset.gravityIssued).toFixed(2)} G
+                                </Badge>
+                              )}
                           </div>
                         </td>
                         <td className="px-4 py-2 text-zinc-600 align-top">
@@ -736,8 +778,23 @@ export default function Admin() {
                         <td className="px-4 py-2 text-right align-top">
                           <div className="flex justify-end items-center gap-2 flex-wrap">
                             {asset.status === "approved" && (
-                              <span className="text-cyan-400 text-xs font-mono">
-                                🔒 Locked in Vault
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-purple-500/40 text-purple-300 hover:text-purple-200 hover:bg-purple-500/10"
+                                onClick={() => handleMint(asset.id)}
+                                disabled={mintAsset.isPending}
+                                data-testid={`button-mint-${asset.id}`}
+                              >
+                                🌌 Mint Gravity
+                              </Button>
+                            )}
+                            {asset.status === "minted" && (
+                              <span className="text-purple-300 text-xs font-mono">
+                                🌌 Minted
+                                {asset.gravityIssued != null
+                                  ? ` · ${Number(asset.gravityIssued).toFixed(2)} G`
+                                  : ""}
                               </span>
                             )}
                             {asset.status === "pending" && (
@@ -809,7 +866,8 @@ export default function Admin() {
                                 </Dialog>
                               </>
                             )}
-                            {!asset.mintedAt && (
+                            {(asset.status === "pending" ||
+                              asset.status === "rejected") && (
                               <Button
                                 size="sm"
                                 variant="outline"
