@@ -108,6 +108,8 @@ export default function MatrixEngine() {
   });
   const gravityPreview =
     Number(mintForm.inrValue) > 0 ? Number(mintForm.inrValue) / 10000 : 0;
+  const [mintCurrency, setMintCurrency] = useState("INR");
+  const [mintLocalAmount, setMintLocalAmount] = useState("");
 
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const objectPathsRef = useRef<Map<string, UploadedDoc>>(new Map());
@@ -147,6 +149,7 @@ export default function MatrixEngine() {
         assetType: "real_estate",
         description: "",
       });
+      setMintLocalAmount("");
       setUploadedDocs([]);
       objectPathsRef.current.clear();
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
@@ -223,6 +226,13 @@ export default function MatrixEngine() {
     ? GRAVITY_RATE
     : rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
   const rateKnown = isGravity || (typeof fxRate === "number" && fxRate > 0);
+  const mintIsGravity = mintCurrency === GRAVITY;
+  const mintSymbol = mintIsGravity ? "G" : currencySymbol(mintCurrency);
+  const mintFxRate = mintIsGravity
+    ? GRAVITY_RATE
+    : rates[mintCurrency] ?? STATIC_INR_PER_UNIT[mintCurrency];
+  const mintRateKnown =
+    mintIsGravity || (typeof mintFxRate === "number" && mintFxRate > 0);
 
   const transferMutation = useMutation({
     mutationFn: (body: object) =>
@@ -489,19 +499,65 @@ export default function MatrixEngine() {
 
                 <div>
                   <label className="text-zinc-400 text-xs font-mono">
-                    Asset Valuation in INR (₹) *
+                    Asset Valuation ({mintSymbol}) *
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10000"
-                    placeholder="e.g., 5000000"
-                    value={mintForm.inrValue}
-                    onChange={(e) =>
-                      setMintForm({ ...mintForm, inrValue: e.target.value })
-                    }
-                    className="w-full mt-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none"
-                  />
+                  <div className="flex gap-2 mt-1">
+                    <select
+                      value={mintCurrency}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setMintCurrency(next);
+                        const nextRate =
+                          next === GRAVITY
+                            ? GRAVITY_RATE
+                            : rates[next] ?? STATIC_INR_PER_UNIT[next];
+                        setMintLocalAmount(
+                          mintForm.inrValue && nextRate
+                            ? String(Number(mintForm.inrValue) / nextRate)
+                            : "",
+                        );
+                      }}
+                      className="bg-black border border-zinc-700 rounded-md px-2 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none max-w-[8rem]"
+                    >
+                      <option value={GRAVITY}>🌌 Gravity (G)</option>
+                      {options.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="e.g., 5000000"
+                      value={mintLocalAmount}
+                      disabled={!mintRateKnown}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMintLocalAmount(v);
+                        setMintForm((f) => ({
+                          ...f,
+                          inrValue:
+                            v && mintRateKnown
+                              ? String(Number(v) * mintFxRate)
+                              : "",
+                        }));
+                      }}
+                      className="flex-1 bg-black border border-zinc-700 rounded-md px-3 py-2 text-white text-sm focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+                    />
+                  </div>
+                  {!mintRateKnown && (
+                    <p className="text-amber-500/80 text-[11px] mt-1 font-mono">
+                      Live rate for {mintCurrency} unavailable — pick another
+                      currency or Gravity.
+                    </p>
+                  )}
+                  {!mintIsGravity && mintCurrency !== "INR" && gravityPreview > 0 && (
+                    <p className="text-zinc-500 text-[11px] mt-1 font-mono">
+                      ≈ ₹{fmt(Number(mintForm.inrValue))} INR backing
+                    </p>
+                  )}
                   {gravityPreview > 0 && (
                     <p className="text-cyan-400 text-xs mt-1 font-mono">
                       ✨ Liquidity Expansion: {fmt(gravityPreview)} Gravity Notes
