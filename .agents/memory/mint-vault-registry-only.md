@@ -17,7 +17,7 @@ air** — every custody value path debits/credits a real pool.
   the pool/owner row locked `FOR UPDATE` + strict 0-floor (`INSUFFICIENT_POOL` /
   `INSUFFICIENT_OWNER`):
   - **Lock**: debit Growth pool, credit owner by `valuation/GRAVITY_RATE`. Logs `CUSTODY_ISSUE`.
-  - **Revalue** (founder-only): delta `(new-old)/RATE` > 0 → pay owner the extra from the pool. delta < 0 → ONLY update the recorded valuation, **never claw back from the owner** (a value fall is not the owner's doing; what was paid stays theirs). Revalue no longer throws `INSUFFICIENT_OWNER`.
+  - **Revalue** (founder-only): delta `(new-old)/RATE` > 0 → pay owner the extra from the Growth pool AND grow the **System Vault** (`VAULT_ACCOUNT` 001) backing by the same delta (pure increment, like admin approve — not minted). delta < 0 → ONLY update the recorded valuation; **never claw back from the owner AND never shrink the System Vault** (a value fall is not the owner's doing). So both the owner payout and the Vault backing only ever go UP on revalue, never down. Revalue no longer throws `INSUFFICIENT_OWNER`. NOTE: this is the ONE deliberate exception to "custody never touches the System Vault" — it applies to revalue-up only; lock/release still never touch the System Vault.
   - **Release** (plain, non-escrow): claw the issued Gravity back from owner → Growth pool (mirror of lock; owner must still hold it). Escrow release keeps its receiver-credit + 1% founder-fee path untouched.
 
 **Why:** user rejected the earlier "credit the Users Vault + mint-free issue to

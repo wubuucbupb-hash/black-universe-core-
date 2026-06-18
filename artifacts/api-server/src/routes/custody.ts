@@ -7,6 +7,7 @@ import {
   recordPoolFee,
   logTx,
   GROWTH_ACCOUNT,
+  VAULT_ACCOUNT,
   GRAVITY_RATE,
 } from "../lib/matrixEngine";
 
@@ -239,10 +240,12 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
 // ── POST /api/custody/revalue/:id ──────────────────────────────────────────
 // Founder ONLY — correct the valuation (and optional description) of a custody
 // entry. A higher value pays the extra Gravity to the owner from the Growth
-// pool. A LOWER value only updates the recorded valuation — it NEVER claws
-// Gravity back from the owner, because a fall in the asset's value does not
-// depend on the owner (the Gravity already paid stays with them). Never touches
-// the System Vault backing or the mint gate.
+// pool AND grows the System Vault backing by the same delta (the asset now backs
+// more). A LOWER value only updates the recorded valuation — it NEVER claws
+// Gravity back from the owner and NEVER shrinks the System Vault backing,
+// because a fall in the asset's value does not depend on the owner (what was
+// paid/backed stays). So both the owner payout and the Vault backing can only
+// ever go UP on revalue, never down.
 router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
   if (!requireSession(req, res)) return;
 
@@ -263,10 +266,11 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
     }
 
     // Revaluation: if the asset is worth MORE, pay the extra Gravity to the owner
-    // from the Growth pool. If it is worth LESS, only the recorded valuation
-    // changes — no Gravity is clawed back (a value fall is not the owner's
-    // doing). The row is locked FOR UPDATE so the value change and any pool move
-    // stay consistent.
+    // from the Growth pool AND grow the System Vault backing by the same delta.
+    // If it is worth LESS, only the recorded valuation changes — no Gravity is
+    // clawed back and the System Vault is NOT reduced (a value fall is not the
+    // owner's doing). The row is locked FOR UPDATE so the value change and any
+    // pool move stay consistent.
     const updated = await db.transaction(async (tx) => {
       const [entry] = await tx
         .select()
@@ -311,6 +315,18 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
           `✏️ [REVALUE +] entry #${entryId}: ₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)} (+${deltaGravity.toFixed(2)} G to ${entry.ownerAccount} from Growth pool)`,
           pool,
           entry.ownerAccount,
+          deltaGravity.toFixed(6),
+          tx,
+        );
+        // The asset now backs MORE — grow the System Vault backing by the same
+        // delta (counted in Gravity, like admin approve; never minted here). The
+        // Vault backing can only ever go up on revalue, never down.
+        await adjustBalance(VAULT_ACCOUNT, deltaGravity.toFixed(6), tx);
+        await logTx(
+          "VAULT_REVALUE",
+          `🏦 [REVALUE → VAULT] entry #${entryId}: +${deltaGravity.toFixed(2)} G added to System Vault backing (₹${oldVal.toFixed(2)} → ₹${newVal.toFixed(2)})`,
+          undefined,
+          VAULT_ACCOUNT,
           deltaGravity.toFixed(6),
           tx,
         );
