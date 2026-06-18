@@ -73,10 +73,11 @@ export default function VaultPage() {
 
   const isAdmin = user?.role === "admin";
 
+  // System-wide vault view — Founder/admin only.
   const { data: summaryData } = useQuery({
     queryKey: ["custody-summary"],
     queryFn: () => apiFetch("/api/custody/summary"),
-    enabled: !!user,
+    enabled: !!isAdmin,
     refetchInterval: 5000,
   });
 
@@ -87,6 +88,14 @@ export default function VaultPage() {
     refetchInterval: 5000,
   });
 
+  // External (non-admin) users only ever see THEIR OWN vault.
+  const { data: mineData, isLoading: mineLoading } = useQuery({
+    queryKey: ["custody-mine"],
+    queryFn: () => apiFetch("/api/custody/mine"),
+    enabled: !!user && !isAdmin,
+    refetchInterval: 5000,
+  });
+
   const { data: accountsData } = useQuery({
     queryKey: ["matrix-accounts"],
     queryFn: () => apiFetch("/api/matrix/accounts"),
@@ -94,8 +103,9 @@ export default function VaultPage() {
   });
 
   const accounts: any[] = accountsData?.accounts ?? [];
-  const summary = summaryData ?? { total: 0, locked: 0, pending: 0, released: 0, totalLockedValue: 0 };
-  const entries: any[] = vaultData?.entries ?? [];
+  const summary = (isAdmin ? summaryData : mineData?.summary) ?? { total: 0, locked: 0, pending: 0, released: 0, totalLockedValue: 0 };
+  const entries: any[] = (isAdmin ? vaultData?.entries : mineData?.entries) ?? [];
+  const entriesLoading = isAdmin ? vaultLoading : mineLoading;
 
   const releaseMutation = useMutation({
     mutationFn: (id: number) => apiFetch(`/api/custody/release/${id}`, { method: "POST" }),
@@ -116,6 +126,7 @@ export default function VaultPage() {
       setEscrowForm({ senderAccount: "", receiverAccount: "", amount: "", description: "" });
       qc.invalidateQueries({ queryKey: ["custody-summary"] });
       qc.invalidateQueries({ queryKey: ["custody-vault"] });
+      qc.invalidateQueries({ queryKey: ["custody-mine"] });
       qc.invalidateQueries({ queryKey: ["matrix-accounts"] });
     },
     onError: (e: Error) => toast({ title: "Escrow Failed", description: e.message, variant: "destructive" }),
@@ -129,6 +140,7 @@ export default function VaultPage() {
       setLockLocalAmount("");
       qc.invalidateQueries({ queryKey: ["custody-summary"] });
       qc.invalidateQueries({ queryKey: ["custody-vault"] });
+      qc.invalidateQueries({ queryKey: ["custody-mine"] });
     },
     onError: (e: Error) => toast({ title: "Lock Failed", description: e.message, variant: "destructive" }),
   });
@@ -350,30 +362,25 @@ export default function VaultPage() {
             </div>
           </div>
 
-          {/* RIGHT: Vault Entries (Founder only) */}
+          {/* RIGHT: Vault Entries — admin sees ALL, external user sees only their own */}
           <div className="border border-zinc-800 rounded-xl bg-zinc-950 overflow-hidden">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
               <h2 className="text-xs font-bold font-mono text-cyan-400 tracking-widest">
-                📋 VAULT LEDGER
+                📋 {isAdmin ? "VAULT LEDGER" : "MY VAULT"}
               </h2>
               {!isAdmin && (
-                <span className="text-[10px] font-mono text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded">
-                  🔒 FOUNDER ACCESS ONLY
+                <span className="text-[10px] font-mono text-cyan-500 border border-cyan-500/30 px-2 py-0.5 rounded">
+                  🔒 YOUR ENTRIES ONLY
                 </span>
               )}
             </div>
 
-            {!isAdmin ? (
-              <div className="p-8 text-center">
-                <div className="text-4xl mb-3">👑</div>
-                <p className="text-zinc-500 font-mono text-sm">Full vault data is restricted to</p>
-                <p className="text-cyan-400 font-mono text-sm font-bold">Founder Root (111111111111)</p>
-                <p className="text-zinc-600 font-mono text-xs mt-2">You can see summary counts above</p>
-              </div>
-            ) : vaultLoading ? (
+            {entriesLoading ? (
               <div className="p-8 text-center text-zinc-600 font-mono text-sm">Loading vault...</div>
             ) : entries.length === 0 ? (
-              <div className="p-8 text-center text-zinc-600 font-mono text-sm">No custody entries yet</div>
+              <div className="p-8 text-center text-zinc-600 font-mono text-sm">
+                {isAdmin ? "No custody entries yet" : "You have no vault entries yet"}
+              </div>
             ) : (
               <div className="divide-y divide-zinc-800/50 max-h-[600px] overflow-y-auto">
                 {entries.map((e) => (

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, custodyLedgerTable, matrixAccountsTable, matrixTransactionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { encrypt, decrypt } from "../lib/encryption";
 import {
   adjustBalance,
@@ -87,6 +87,74 @@ router.get("/custody/vault", async (req, res): Promise<void> => {
   }));
 
   res.json({ entries: decrypted });
+});
+
+// ── GET /api/custody/mine ──────────────────────────────────────────────────
+// Any logged-in user — returns ONLY the caller's own vault: custody entries
+// they own or are an escrow party to, decrypted (it's their own data), plus a
+// summary scoped to just those entries. External users never see other people's
+// or system-wide vault data here.
+router.get("/custody/mine", async (req, res): Promise<void> => {
+  if (!requireSession(req, res)) return;
+
+  const userId = req.session!.userId!;
+  const { usersTable } = await import("@workspace/db");
+  const [u] = await db
+    .select({ accountNumber: usersTable.accountNumber })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  const acct = u?.accountNumber;
+  const empty = { total: 0, locked: 0, pending: 0, released: 0, totalLockedValue: 0 };
+  if (!acct) {
+    res.json({ accountNumber: null, entries: [], summary: empty });
+    return;
+  }
+
+  const rows = await db
+    .select()
+    .from(custodyLedgerTable)
+    .where(
+      or(
+        eq(custodyLedgerTable.ownerAccount, acct),
+        eq(custodyLedgerTable.escrowFromAccount, acct),
+        eq(custodyLedgerTable.escrowToAccount, acct),
+      ),
+    )
+    .orderBy(custodyLedgerTable.createdAt);
+
+  const entries = rows.map((e) => ({
+    id: e.id,
+    ownerAccount: e.ownerAccount,
+    assetType: e.assetType,
+    valuation: decrypt(e.valuationEncrypted),
+    description: decrypt(e.descriptionEncrypted),
+    escrowAmount: e.escrowAmountEncrypted ? decrypt(e.escrowAmountEncrypted) : null,
+    escrowFromAccount: e.escrowFromAccount,
+    escrowToAccount: e.escrowToAccount,
+    status: e.status,
+    releasedAt: e.releasedAt,
+    createdAt: e.createdAt,
+  }));
+
+  const locked = entries.filter((e) => e.status === "LOCKED");
+  let totalLockedValue = 0;
+  for (const e of locked) {
+    totalLockedValue += parseFloat(e.valuation) || 0;
+  }
+
+  res.json({
+    accountNumber: acct,
+    entries,
+    summary: {
+      total: entries.length,
+      locked: locked.length,
+      pending: entries.filter((e) => e.status === "PENDING").length,
+      released: entries.filter((e) => e.status === "RELEASED").length,
+      totalLockedValue,
+    },
+  });
 });
 
 // ── POST /api/custody/lock ─────────────────────────────────────────────────
