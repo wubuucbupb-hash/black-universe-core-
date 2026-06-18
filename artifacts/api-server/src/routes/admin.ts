@@ -92,6 +92,11 @@ router.get("/admin/assets", async (req, res): Promise<void> => {
   );
 });
 
+// Approving a declared asset locks it straight into the Vault — no separate
+// manual deposit step. In ONE atomic transaction: flip pending → approved,
+// add the asset's Gravity value to Vault backing, write a DEPOSIT transaction
+// and a LOCKED custody entry. The asset's stored claimedValue is its ₹ value
+// (1 G = ₹GRAVITY_RATE), so vault backing = claimedValue ÷ GRAVITY_RATE.
 router.post("/admin/assets/:id/approve", async (req, res): Promise<void> => {
   if (!(await requireAdmin(req, res))) return;
 
@@ -107,20 +112,99 @@ router.post("/admin/assets/:id/approve", async (req, res): Promise<void> => {
     return;
   }
 
-  const claimedValue = parseFloat(asset.claimedValue);
-  const feeAmount = claimedValue * 0.01;
+  if (asset.status !== "pending") {
+    res.status(409).json({ error: "Only pending assets can be approved" });
+    return;
+  }
 
-  const [updated] = await db
-    .update(assetsTable)
-    .set({ status: "approved", feeAmount: feeAmount.toString() })
-    .where(eq(assetsTable.id, id))
-    .returning();
+  const [owner] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, asset.userId))
+    .limit(1);
 
-  res.json({
-    ...updated,
-    claimedValue: parseFloat(updated.claimedValue),
-    feeAmount: parseFloat(updated.feeAmount!),
-  });
+  if (!owner) {
+    res.status(404).json({ error: "Asset owner not found" });
+    return;
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Atomic claim: only one request flips a pending asset to approved+locked.
+      const [claimed] = await tx
+        .update(assetsTable)
+        .set({ status: "approved", mintedAt: new Date() })
+        .where(
+          and(
+            eq(assetsTable.id, id),
+            eq(assetsTable.status, "pending"),
+            isNull(assetsTable.mintedAt),
+          ),
+        )
+        .returning();
+
+      // Lost the race (another request already processed it).
+      if (!claimed) return null;
+
+      // Ensure the owner has a linked Matrix account for the custody record.
+      const targetWallet = await ensureUserMatrixAccount(owner, tx);
+
+      const claimedValue = parseFloat(claimed.claimedValue);
+      const feeAmount = claimedValue * 0.01;
+      const vaultGravity = claimedValue / GRAVITY_RATE;
+
+      // The asset's value backs the Vault, counted in Gravity. Gravity is NOT
+      // minted here — minting stays a separate, Vault-gated (200%) action.
+      await adjustBalance(VAULT_ACCOUNT, vaultGravity.toFixed(6), tx);
+      await logTx(
+        "DEPOSIT",
+        `🏦 [ASSET → VAULT] +${vaultGravity.toFixed(2)} G (₹${claimedValue.toFixed(2)}) — "${claimed.description}" approved & locked into Vault backing`,
+        undefined,
+        VAULT_ACCOUNT,
+        vaultGravity.toFixed(6),
+        tx,
+      );
+
+      // Lock a custody ledger entry for the asset (encrypted at rest).
+      await tx.insert(custodyLedgerTable).values({
+        ownerAccount: targetWallet,
+        assetType: claimed.assetType,
+        valuationEncrypted: encrypt(claimedValue.toString()),
+        descriptionEncrypted: encrypt(claimed.description),
+        status: "LOCKED",
+      });
+
+      const [updated] = await tx
+        .update(assetsTable)
+        .set({ feeAmount: feeAmount.toString(), gravityIssued: "0.000000" })
+        .where(eq(assetsTable.id, id))
+        .returning();
+
+      return { updated, targetWallet, vaultGravity };
+    });
+
+    if (!result) {
+      res.status(409).json({ error: "Asset has already been processed" });
+      return;
+    }
+
+    req.log.info(
+      { assetId: id, targetWallet: result.targetWallet, vaultGravity: result.vaultGravity },
+      "Asset approved and locked into Vault",
+    );
+
+    const { updated } = result;
+    res.json({
+      ...updated,
+      claimedValue: parseFloat(updated.claimedValue),
+      feeAmount: updated.feeAmount != null ? parseFloat(updated.feeAmount) : null,
+      gravityIssued:
+        updated.gravityIssued != null ? parseFloat(updated.gravityIssued) : null,
+    });
+  } catch (err) {
+    req.log.error({ err, assetId: id }, "Approve+lock failed; transaction rolled back");
+    res.status(500).json({ error: "Approve failed" });
+  }
 });
 
 router.post("/admin/assets/:id/reject", async (req, res): Promise<void> => {

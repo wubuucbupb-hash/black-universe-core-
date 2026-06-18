@@ -634,10 +634,11 @@ export default function Admin() {
             value="assets"
             className="rounded-xl overflow-hidden border border-zinc-800"
           >
-            <div className="bg-black px-4 py-2 flex items-center gap-2 border-b border-zinc-800">
+            <div className="bg-black px-4 py-2 flex items-center justify-between gap-2 border-b border-zinc-800">
               <span className="text-cyan-400 text-xs font-mono font-bold tracking-widest">
                 📜 ASSET REGISTRY — {assets?.length ?? 0} DECLARATIONS
               </span>
+              <CurrencySelect />
             </div>
             <div className="bg-[#0a0a0a] overflow-x-auto">
               {isAssetsLoading ? (
@@ -717,14 +718,14 @@ export default function Admin() {
                           )}
                         </td>
                         <td className="px-4 py-2 text-right text-green-400 font-bold align-top">
-                          {formatCurrency(asset.claimedValue)}
+                          {format(Number(asset.claimedValue) / GRAVITY_RATE)}
                         </td>
                         <td className="px-4 py-2 align-top">
                           <div className="flex flex-col gap-1">
                             {getStatusBadge(asset.status)}
                             {asset.mintedAt && (
                               <Badge className="bg-cyan-600 hover:bg-cyan-700 w-fit">
-                                Minted{asset.gravityIssued != null ? ` · ${asset.gravityIssued} G` : ""}
+                                🔒 Vault-Locked · {format(Number(asset.claimedValue) / GRAVITY_RATE)}
                               </Badge>
                             )}
                           </div>
@@ -734,20 +735,9 @@ export default function Admin() {
                         </td>
                         <td className="px-4 py-2 text-right align-top">
                           <div className="flex justify-end items-center gap-2 flex-wrap">
-                            {asset.status === "approved" && !asset.mintedAt && (
-                              <Button
-                                size="sm"
-                                className="bg-cyan-600 hover:bg-cyan-500 text-white"
-                                onClick={() => handleDeposit(asset.id)}
-                                disabled={depositAsset.isPending}
-                                data-testid={`button-deposit-${asset.id}`}
-                              >
-                                <DollarSign className="h-4 w-4 mr-1" /> Deposit & Mint
-                              </Button>
-                            )}
-                            {asset.status === "approved" && asset.mintedAt && (
+                            {asset.status === "approved" && (
                               <span className="text-cyan-400 text-xs font-mono">
-                                ✓ Minted
+                                🔒 Locked in Vault
                               </span>
                             )}
                             {asset.status === "pending" && (

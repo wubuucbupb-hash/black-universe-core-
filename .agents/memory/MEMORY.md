@@ -3,7 +3,7 @@
 - [matrix/accounts public contract](matrix-accounts-public-contract.md) — endpoint is public-by-design (Home preview) but must stay PII-stripped; never re-add phone/email or add an auth gate.
 - [Universe Control Space scope](universe-control-space-scope.md) — page = System Accounts + Universe Vault (mint/submit/split) ONLY; admin Asset Registry stays only in admin.tsx (recurring correction).
 - [Money-flow atomicity](money-flow-atomicity.md) — value paths = tx + FOR UPDATE + strict 0 floor; pool fees buffered (pending_fees, 60s flush); never re-add senderAccount or inline pool credits.
-- [Vault = documented deposits only](vault-documented-deposits-only.md) — Vault value changes ONLY via asset deposit pipeline; manual anchor/top-up endpoint + UI removed, don't re-add; proof docs required on submit.
+- [Vault = documented deposits only](vault-documented-deposits-only.md) — Vault changes ONLY via asset pipeline; APPROVE now auto-locks (deposit merged in, atomic, gated on pending); no separate Deposit&Mint step; manual anchor removed; proof docs required.
 - [Vault vs System Core 200% backing](vault-200-backing.md) — BOTH Vault & Core stored in GRAVITY; mint gated at vaultGravity≥2×coreGravity (no ×rate); asset deposit converts ₹÷rate→G; display currency is view-only.
 - [drizzle-zod must import zod/v4](drizzle-zod-v4-import.md) — schema files using createInsertSchema must import z from "zod/v4"; a plain "zod" import breaks lib declaration emit and cascades fake "no exported member" errors into api-server.
 - [password reset & doc ACL](password-reset-and-doc-acl.md) — reset must stay token-based (never email-only); GET /storage/objects/* must stay session+owner gated before touching storage.

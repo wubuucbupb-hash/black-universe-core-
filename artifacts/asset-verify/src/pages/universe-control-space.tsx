@@ -43,6 +43,7 @@ import {
   Lock,
 } from "lucide-react";
 import { useCurrency, CurrencySelect } from "@/components/currency-provider";
+import { GRAVITY_RATE } from "@/lib/currency";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -236,6 +237,9 @@ export default function UniverseControlSpace() {
       {
         data: {
           ...values,
+          // Form value is entered in Gravity; the backend stores claimedValue
+          // in ₹ (1 G = ₹GRAVITY_RATE) so Vault backing = claimedValue ÷ rate.
+          claimedValue: values.claimedValue * GRAVITY_RATE,
           documentUrls: uploadedDocs.map((d) => d.objectPath),
         },
       },
@@ -664,21 +668,27 @@ export default function UniverseControlSpace() {
                           name="claimedValue"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Estimated Value (USD)</FormLabel>
+                              <FormLabel>Valuation in Gravity 🌌</FormLabel>
                               <FormControl>
                                 <div className="relative">
                                   <span className="absolute left-3 top-2.5 text-muted-foreground">
-                                    $
+                                    G
                                   </span>
                                   <Input
                                     type="number"
+                                    step="any"
                                     className="pl-7 font-serif"
-                                    placeholder="1000000"
+                                    placeholder="100000"
                                     {...field}
                                     data-testid="input-value"
                                   />
                                 </div>
                               </FormControl>
+                              <FormDescription>
+                                Declare the asset's value in Gravity (1 G = ₹
+                                {GRAVITY_RATE.toLocaleString("en-IN")}). On
+                                approval it locks into the Vault automatically.
+                              </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
