@@ -17,3 +17,4 @@
 - [Money-flow atomicity gaps](money-flow-atomicity.md) — transfer & escrow lack DB transactions (race/double-credit risk); equity-buy & INR-approve are tx-safe. Harden before scaling.
 - [Matrix system-account access & documented mint](matrix-system-account-access.md) — admins intentionally see System Main + Reserve Vault in transfer dropdowns (don't re-lock); Founder Mint records optional proof docs as a status:"minted" asset.
 - [Gravity atomic transfers vs display](gravity-atomic-display.md) — 0.0001 IS transferred & stored (numeric(30,6)+toFixed(6)); "shows 00" is pure display rounding (fmt/fmtG maxFractionDigits:2) + input step, NOT a real bug.
+- [Mint & revalue are custody-registry-only](mint-vault-registry-only.md) — mint auto-inserts a custody LOCKED entry & /custody/revalue edits it, but NEITHER touches VAULT_ACCOUNT backing or the 200% gate; only deposit bumps backing.

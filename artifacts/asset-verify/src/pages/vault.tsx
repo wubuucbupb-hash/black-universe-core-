@@ -40,6 +40,8 @@ export default function VaultPage() {
   const [, setLocation] = useLocation();
   const [escrowForm, setEscrowForm] = useState({ senderAccount: "", receiverAccount: "", amount: "", description: "" });
   const [lockForm, setLockForm] = useState({ ownerAccount: "", assetType: "", valuation: "", description: "" });
+  const [revalueId, setRevalueId] = useState<number | null>(null);
+  const [revalueValue, setRevalueValue] = useState("");
 
   const isAdmin = user?.role === "admin";
 
@@ -100,6 +102,19 @@ export default function VaultPage() {
       qc.invalidateQueries({ queryKey: ["custody-vault"] });
     },
     onError: (e: Error) => toast({ title: "Lock Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const revalueMutation = useMutation({
+    mutationFn: ({ id, valuation }: { id: number; valuation: string }) =>
+      apiFetch(`/api/custody/revalue/${id}`, { method: "POST", body: JSON.stringify({ valuation }) }),
+    onSuccess: () => {
+      toast({ title: "✏️ Revalued", description: "Custody valuation updated" });
+      setRevalueId(null);
+      setRevalueValue("");
+      qc.invalidateQueries({ queryKey: ["custody-vault"] });
+      qc.invalidateQueries({ queryKey: ["custody-summary"] });
+    },
+    onError: (e: Error) => toast({ title: "Revaluation Failed", description: e.message, variant: "destructive" }),
   });
 
   if (!user) {
@@ -287,7 +302,32 @@ export default function VaultPage() {
                           <span className="text-zinc-500 text-[10px] font-mono">{e.assetType}</span>
                         </div>
                         <div className="text-white text-sm font-semibold truncate">{e.description}</div>
-                        <div className="text-cyan-400 text-xs font-mono mt-0.5">₹ {fmt(e.valuation)}</div>
+                        {revalueId === e.id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="number"
+                              min="0"
+                              value={revalueValue}
+                              onChange={(ev) => setRevalueValue(ev.target.value)}
+                              className="w-32 bg-black border border-cyan-700 rounded px-2 py-1 text-cyan-300 text-xs font-mono focus:border-cyan-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => revalueMutation.mutate({ id: e.id, valuation: revalueValue })}
+                              disabled={revalueMutation.isPending || !revalueValue}
+                              className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-black text-[10px] font-bold rounded"
+                            >
+                              SAVE
+                            </button>
+                            <button
+                              onClick={() => { setRevalueId(null); setRevalueValue(""); }}
+                              className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold rounded"
+                            >
+                              CANCEL
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-cyan-400 text-xs font-mono mt-0.5">₹ {fmt(e.valuation)}</div>
+                        )}
                         {e.escrowFromAccount && (
                           <div className="text-zinc-500 text-[10px] font-mono mt-1">
                             {e.escrowFromAccount} → {e.escrowToAccount}
@@ -298,14 +338,26 @@ export default function VaultPage() {
                           Owner: {e.ownerAccount} · #{e.id}
                         </div>
                       </div>
-                      {e.status === "LOCKED" && isAdmin && (
-                        <button
-                          onClick={() => releaseMutation.mutate(e.id)}
-                          disabled={releaseMutation.isPending}
-                          className="shrink-0 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black text-xs font-bold rounded-md transition-all"
-                        >
-                          {releaseMutation.isPending ? "..." : "🔓 RELEASE"}
-                        </button>
+                      {isAdmin && (
+                        <div className="shrink-0 flex flex-col gap-1.5">
+                          {revalueId !== e.id && e.status !== "RELEASED" && !e.escrowFromAccount && (
+                            <button
+                              onClick={() => { setRevalueId(e.id); setRevalueValue(String(e.valuation)); }}
+                              className="px-3 py-1.5 bg-cyan-600/80 hover:bg-cyan-500 text-black text-xs font-bold rounded-md transition-all"
+                            >
+                              ✏️ REVALUE
+                            </button>
+                          )}
+                          {e.status === "LOCKED" && (
+                            <button
+                              onClick={() => releaseMutation.mutate(e.id)}
+                              disabled={releaseMutation.isPending}
+                              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black text-xs font-bold rounded-md transition-all"
+                            >
+                              {releaseMutation.isPending ? "..." : "🔓 RELEASE"}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                     {e.releasedAt && (

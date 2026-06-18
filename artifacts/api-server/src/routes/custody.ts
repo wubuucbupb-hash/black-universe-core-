@@ -110,6 +110,58 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
   }
 });
 
+// ── POST /api/custody/revalue/:id ──────────────────────────────────────────
+// Founder ONLY — correct the valuation (and optional description) of a custody
+// entry. Registry-only: does NOT touch VAULT_ACCOUNT backing or the mint gate.
+router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
+  if (!requireSession(req, res)) return;
+
+  const founder = await isFounder(req.session!.userId!);
+  if (!founder) {
+    res.status(403).json({ error: "Founder Root access required" });
+    return;
+  }
+
+  try {
+    const entryId = Number(req.params.id);
+    const { valuation, description } = req.body;
+
+    if (valuation == null || Number(valuation) <= 0) {
+      res.status(400).json({ error: "A positive valuation is required" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(custodyLedgerTable)
+      .set({
+        valuationEncrypted: encrypt(String(valuation)),
+        updatedAt: new Date(),
+        ...(typeof description === "string" && description.trim()
+          ? { descriptionEncrypted: encrypt(description) }
+          : {}),
+      })
+      .where(eq(custodyLedgerTable.id, entryId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ error: "Custody entry not found" });
+      return;
+    }
+
+    res.json({
+      entry: {
+        id: updated.id,
+        valuation: decrypt(updated.valuationEncrypted),
+        description: decrypt(updated.descriptionEncrypted),
+        status: updated.status,
+        updatedAt: updated.updatedAt,
+      },
+    });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Revaluation failed" });
+  }
+});
+
 // ── POST /api/custody/release/:id ─────────────────────────────────────────
 // Founder ONLY — release escrow, credit receiver, mark RELEASED
 router.post("/custody/release/:id", async (req, res): Promise<void> => {
