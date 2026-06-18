@@ -10,7 +10,7 @@ import {
   getListMyAssetsQueryKey,
   useDeleteAsset,
 } from "@workspace/api-client-react";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import {
   GRAVITY_RATE,
   STATIC_INR_PER_UNIT,
@@ -264,7 +264,7 @@ export default function Dashboard() {
         </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <Card>
+          <Card className="bg-gradient-to-br from-cyan-950/50 via-card to-card border-cyan-900/40">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                 Total Asset Value
@@ -278,12 +278,30 @@ export default function Dashboard() {
                   className="text-4xl font-serif font-semibold text-primary"
                   data-testid="text-total-asset-value"
                 >
-                  {formatCurrency(summary?.totalClaimedValue || 0)}
+                  {rateKnown
+                    ? `${selectedSymbol}${fmtG(Number(summary?.totalClaimedValue || 0) / fxRate)}`
+                    : "—"}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1">
-                Combined value of all declared assets
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-xs text-muted-foreground">
+                  Combined value of all declared assets
+                </p>
+                <select
+                  value={currencyCode}
+                  onChange={(e) => handleCurrencyChange(e.target.value)}
+                  className="ml-auto border border-zinc-700 rounded-md px-2 py-1 text-xs bg-zinc-900 text-zinc-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-[7.5rem]"
+                  data-testid="select-asset-value-currency"
+                  aria-label="Asset value display currency"
+                >
+                  <option value={GRAVITY}>🌌 Gravity (G)</option>
+                  {currencyList.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} {c.symbol !== c.code ? `(${c.symbol})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -548,7 +566,9 @@ export default function Dashboard() {
                           )}
                         </TableCell>
                         <TableCell className="font-serif">
-                          {formatCurrency(asset.claimedValue)}
+                          {rateKnown
+                            ? `${selectedSymbol}${fmtG(Number(asset.claimedValue) / fxRate)}`
+                            : "—"}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
