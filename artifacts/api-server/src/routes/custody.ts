@@ -177,10 +177,12 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
     }
     const backingGravity = inrValue / GRAVITY_RATE;
 
-    // Locking a USER asset puts its Gravity value into the USERS VAULT — a pool
-    // kept STRUCTURALLY SEPARATE from the System Vault. It is visible (and
-    // counted in the Total Vault) but NEVER backs minting: the mint gate reads
-    // the System Vault only. Insert + Users-Vault bump run atomically.
+    // Locking a USER asset records its Gravity value in the USERS VAULT (a pool
+    // kept STRUCTURALLY SEPARATE from the System Vault — visible + counted in the
+    // Total Vault but NEVER backs minting) AND issues that same Gravity straight
+    // to the owner's own account (collateral tokenisation). Insert + Users-Vault
+    // bump + owner credit all run atomically. The System Vault and mint gate are
+    // never touched.
     const entry = await db.transaction(async (tx) => {
       const [row] = await tx.insert(custodyLedgerTable).values({
         ownerAccount,
@@ -196,6 +198,17 @@ router.post("/custody/lock", async (req, res): Promise<void> => {
         `👥 [USERS VAULT LOCK] ${assetType} locked by ${ownerAccount}: +${backingGravity.toFixed(2)} G (does NOT back minting)`,
         undefined,
         USERS_VAULT,
+        backingGravity.toFixed(6),
+        tx,
+      );
+
+      // Issue the locked asset's Gravity to the owner's own account.
+      await adjustBalance(ownerAccount, backingGravity.toFixed(6), tx);
+      await logTx(
+        "CUSTODY_ISSUE",
+        `🌌 [CUSTODY ISSUE] +${backingGravity.toFixed(2)} G issued to ${ownerAccount} for locked ${assetType}`,
+        undefined,
+        ownerAccount,
         backingGravity.toFixed(6),
         tx,
       );
