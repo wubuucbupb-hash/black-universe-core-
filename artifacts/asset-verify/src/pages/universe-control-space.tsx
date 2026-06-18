@@ -58,8 +58,8 @@ async function apiFetch(path: string, opts?: RequestInit) {
 }
 
 const SYSTEM_CORES = [
-  "000000000000",
   "000000000001",
+  "000000000000",
   "111111111111",
   "222222222222",
   "333333333333",
@@ -108,9 +108,13 @@ export default function UniverseControlSpace() {
     refetchInterval: 5000,
   });
   const accounts: any[] = accountsData?.accounts ?? [];
-  const systemAccounts = accounts.filter((a) =>
-    SYSTEM_CORES.includes(a.accountNumber),
-  );
+  const systemAccounts = accounts
+    .filter((a) => SYSTEM_CORES.includes(a.accountNumber))
+    .sort(
+      (a, b) =>
+        SYSTEM_CORES.indexOf(a.accountNumber) -
+        SYSTEM_CORES.indexOf(b.accountNumber),
+    );
 
   // ── Vault 200% backing status ───────────────────────────────────────────
   const coreAcct = accounts.find((a) => a.accountNumber === "000000000000");

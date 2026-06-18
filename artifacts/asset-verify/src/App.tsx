@@ -86,6 +86,25 @@ const SYSTEM_LABELS: Record<string, string> = {
   "999999999999": "Commodities Pool",
 };
 const SYSTEM_CORES = Object.keys(SYSTEM_LABELS);
+// Display order: Reserve Vault first (primary asset backing), then System Core,
+// then the remaining pools.
+const SYSTEM_ORDER = [
+  "000000000001", // Reserve Vault
+  "000000000000", // System Core
+  "111111111111",
+  "222222222222",
+  "333333333333",
+  "444444444444",
+  "555555555555",
+  "666666666666",
+  "777777777777",
+  "888888888888",
+  "999999999999",
+];
+const systemRank = (n: string) => {
+  const i = SYSTEM_ORDER.indexOf(n);
+  return i === -1 ? SYSTEM_ORDER.length : i;
+};
 
 function Home() {
   const [, setLocation] = useLocation();
@@ -117,7 +136,9 @@ function Home() {
   });
 
   const allAccounts: any[] = matrixData?.accounts ?? [];
-  const systemAccounts = allAccounts.filter((a: any) => SYSTEM_CORES.includes(a.accountNumber));
+  const systemAccounts = allAccounts
+    .filter((a: any) => SYSTEM_CORES.includes(a.accountNumber))
+    .sort((a: any, b: any) => systemRank(a.accountNumber) - systemRank(b.accountNumber));
   const citizens = allAccounts.filter((a: any) => !SYSTEM_CORES.includes(a.accountNumber));
 
   if (user) {

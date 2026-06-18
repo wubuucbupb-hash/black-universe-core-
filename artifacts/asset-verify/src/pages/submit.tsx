@@ -16,18 +16,34 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, Info, FileText, X, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import {
+  GRAVITY_RATE,
+  STATIC_INR_PER_UNIT,
+  currencyOptions,
+  fetchInrPerUnitRates,
+} from "@/lib/currency";
+import { GRAVITY } from "@/components/currency-provider";
 
 const submitSchema = z.object({
   assetType: z.enum(["real_estate", "debt", "equity", "commodity", "money_market"], {
     required_error: "Please select an asset type",
   }),
+  // Canonical money value in INR (1 Gravity = ₹GRAVITY_RATE). The form lets the
+  // user enter the value in Gravity or any world currency and converts to INR
+  // here, so the backend (claimedValue ÷ GRAVITY_RATE = Gravity) stays correct.
   claimedValue: z.coerce.number().min(1, "Value must be greater than 0"),
   description: z.string().min(5, "Please provide a detailed description"),
   documentNote: z.string().optional(),
 });
 
 type UploadedDoc = { name: string; objectPath: string };
+
+const fmtNum = (n: number) =>
+  (Number.isFinite(n) ? n : 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export default function SubmitAsset() {
   const { user, isLoading } = useAuth();
@@ -38,6 +54,28 @@ export default function SubmitAsset() {
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const objectPathsRef = useRef<Map<string, { name: string; objectPath: string }>>(new Map());
 
+  // Value input — Gravity is the canonical unit (default selection). The user
+  // may pick any world currency; the entered amount auto-converts to Gravity +
+  // INR live, both here at submit time and (via the display selector) after.
+  const [currencyCode, setCurrencyCode] = useState<string>(GRAVITY);
+  const [amount, setAmount] = useState("");
+  const [rates, setRates] = useState<Record<string, number>>(() => STATIC_INR_PER_UNIT);
+  const currencyList = useMemo(() => currencyOptions(), []);
+
+  useEffect(() => {
+    let active = true;
+    fetchInrPerUnitRates()
+      .then((live) => {
+        if (active) setRates((prev) => ({ ...prev, ...live }));
+      })
+      .catch(() => {
+        // keep the static offline fallback
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const form = useForm<z.infer<typeof submitSchema>>({
     resolver: zodResolver(submitSchema),
     defaultValues: {
@@ -47,6 +85,24 @@ export default function SubmitAsset() {
       documentNote: "",
     },
   });
+
+  // Conversions. Gravity → INR = ×GRAVITY_RATE; fiat → INR = ×(INR per unit).
+  const isGravity = currencyCode === GRAVITY;
+  const fxRate = isGravity ? null : rates[currencyCode] ?? STATIC_INR_PER_UNIT[currencyCode];
+  const rateKnown = isGravity || (typeof fxRate === "number" && fxRate > 0);
+  const amountNum = Number(amount) || 0;
+  const inrValue = isGravity ? amountNum * GRAVITY_RATE : amountNum * (fxRate ?? 0);
+  const gravityValue = inrValue / GRAVITY_RATE;
+  const usdRate = rates.USD ?? STATIC_INR_PER_UNIT.USD ?? 83;
+  const usdValue = usdRate > 0 ? inrValue / usdRate : 0;
+
+  // Keep the form's canonical INR value in sync with the converted amount.
+  useEffect(() => {
+    form.setValue("claimedValue", inrValue, {
+      shouldValidate: form.formState.isSubmitted,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inrValue]);
 
   if (isLoading) return null;
   if (!user) {
@@ -149,22 +205,52 @@ export default function SubmitAsset() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="claimedValue"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estimated Value (USD)</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                          <Input type="number" className="pl-7 font-serif" placeholder="1000000" {...field} data-testid="input-value" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Estimated Value — Gravity-first with universal currency selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none">Estimated Value</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={currencyCode}
+                      onChange={(e) => setCurrencyCode(e.target.value)}
+                      className="rounded-md border border-input bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring max-w-[140px]"
+                      data-testid="select-value-currency"
+                      aria-label="Value currency"
+                    >
+                      <option value={GRAVITY}>🌌 Gravity (G)</option>
+                      {currencyList.map((o) => (
+                        <option key={o.code} value={o.code}>
+                          {o.symbol} {o.code}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="pl-3 font-serif flex-1"
+                      placeholder={isGravity ? "100000" : "1000000"}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      data-testid="input-value"
+                    />
+                  </div>
+                  {amountNum > 0 && (
+                    <p className="text-xs text-muted-foreground font-mono" data-testid="text-value-preview">
+                      ≈ <span className="font-bold text-primary">{fmtNum(gravityValue)} G</span>
+                      {"  ·  "}₹{fmtNum(inrValue)}
+                      {"  ·  "}${fmtNum(usdValue)}
+                      {!rateKnown && <span className="text-destructive"> · live rate unavailable</span>}
+                    </p>
                   )}
-                />
+                  {form.formState.errors.claimedValue && (
+                    <p className="text-sm font-medium text-destructive">
+                      {form.formState.errors.claimedValue.message as string}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Default is Gravity. Pick any currency — it auto-converts to Gravity.
+                  </p>
+                </div>
               </div>
 
               <FormField
