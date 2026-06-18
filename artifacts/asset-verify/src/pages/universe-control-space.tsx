@@ -492,7 +492,7 @@ export default function UniverseControlSpace() {
                         {gravityPreview > 0 ? `: +${fmt(gravityPreview)} G` : ""}
                       </div>
                       <div className="text-emerald-400">
-                        👑 Founder (1%) → 111111111111
+                        👑 Foundation (1%) → 111111111111
                         {gravityPreview > 0
                           ? `: ${fmt(gravityPreview * 0.01)}`
                           : ""}

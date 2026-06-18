@@ -634,7 +634,7 @@ export default function Admin() {
           <Card className="bg-gradient-to-br from-yellow-50 to-amber-100 border-amber-300 shadow-md">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-semibold text-amber-800">
-                Founder Fee Earned (1%)
+                Foundation Fee Earned (1%)
               </CardTitle>
               <DollarSign className="h-5 w-5 text-amber-600" />
             </CardHeader>

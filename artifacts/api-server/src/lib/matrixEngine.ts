@@ -156,6 +156,22 @@ export async function flushPendingFees(): Promise<{
       }
       for (const [poolAccount, total] of sums) {
         await adjustBalance(poolAccount, total.toFixed(6), tx);
+        // Transaction revenue collected by the Foundation ALSO grows the System
+        // Vault backing by the same amount (counted in Gravity, like an asset
+        // approval — the Foundation still keeps the fee as its income). Together
+        // with revaluation and new asset submissions, this is why the Vault
+        // backing only ever goes UP, never down.
+        if (poolAccount === FOUNDER_ACCOUNT) {
+          await adjustBalance(VAULT_ACCOUNT, total.toFixed(6), tx);
+          await logTx(
+            "DEPOSIT",
+            `🏦 [REVENUE → VAULT] +${total.toFixed(2)} G transaction revenue added to System Vault backing`,
+            undefined,
+            VAULT_ACCOUNT,
+            total.toFixed(6),
+            tx,
+          );
+        }
       }
       await tx.delete(pendingFeesTable).where(
         inArray(
@@ -324,7 +340,7 @@ export async function mintGravity(
   );
   await logTx(
     "MINT",
-    `👑 Founder 1%: ${founderCut.toFixed(2)} | 🏛️ Reserve 24%: ${reserveShare.toFixed(2)} | ⚖️ Stability 25%: ${stabilityShare.toFixed(2)} | 🛡️ Security 25%: ${securityShare.toFixed(2)} | 📈 Growth 25%: ${growthShare.toFixed(2)} → ${targetWallet}`,
+    `👑 Foundation 1%: ${founderCut.toFixed(2)} | 🏛️ Reserve 24%: ${reserveShare.toFixed(2)} | ⚖️ Stability 25%: ${stabilityShare.toFixed(2)} | 🛡️ Security 25%: ${securityShare.toFixed(2)} | 📈 Growth 25%: ${growthShare.toFixed(2)} → ${targetWallet}`,
     SYSTEM_MAIN,
     targetWallet,
     growthShare.toFixed(6),

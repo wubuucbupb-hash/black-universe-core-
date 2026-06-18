@@ -72,7 +72,7 @@ router.get("/custody/vault", async (req, res): Promise<void> => {
 
   const founder = await isFounder(req.session!.userId!);
   if (!founder) {
-    res.status(403).json({ error: "Founder Root access required" });
+    res.status(403).json({ error: "Foundation Root access required" });
     return;
   }
 
@@ -251,7 +251,7 @@ router.post("/custody/revalue/:id", async (req, res): Promise<void> => {
 
   const founder = await isFounder(req.session!.userId!);
   if (!founder) {
-    res.status(403).json({ error: "Founder Root access required" });
+    res.status(403).json({ error: "Foundation Root access required" });
     return;
   }
 
@@ -379,7 +379,7 @@ router.post("/custody/release/:id", async (req, res): Promise<void> => {
 
   const founder = await isFounder(req.session!.userId!);
   if (!founder) {
-    res.status(403).json({ error: "Founder Root access required" });
+    res.status(403).json({ error: "Foundation Root access required" });
     return;
   }
 
@@ -530,7 +530,7 @@ router.post("/custody/escrow", async (req, res): Promise<void> => {
 
       await tx.insert(matrixTransactionsTable).values({
         txType: "ESCROW_LOCK",
-        description: `🔒 [ESCROW LOCKED] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (awaiting Founder release)`,
+        description: `🔒 [ESCROW LOCKED] ${sender.name} → ${receiverAccount}: ${txAmount.toFixed(2)} Gravity (awaiting Foundation release)`,
         fromAccount: senderAccount,
         toAccount: receiverAccount,
         amount: txAmount.toFixed(6),
@@ -543,7 +543,7 @@ router.post("/custody/escrow", async (req, res): Promise<void> => {
       success: true,
       custodyId,
       status: "LOCKED",
-      message: "Funds locked in escrow. Awaiting Founder release.",
+      message: "Funds locked in escrow. Awaiting Foundation release.",
       amount: txAmount,
     });
   } catch (err: unknown) {

@@ -85,7 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div className="h-5 w-px bg-cyan-900 mx-1" />
                 <div className="flex-col text-right mr-1 hidden md:flex">
                   <span className="text-xs font-medium leading-none text-cyan-100">{user.name}</span>
-                  <span className="text-[10px] text-cyan-600">{user.role === "admin" ? "👑 Founder" : "Citizen"}</span>
+                  <span className="text-[10px] text-cyan-600">{user.role === "admin" ? "👑 Foundation" : "Citizen"}</span>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleLogout} disabled={logout.isPending} className="border-cyan-800 text-cyan-400 hover:bg-cyan-950 hover:text-cyan-100 text-xs" data-testid="button-logout">
                   <LogOut className="h-3.5 w-3.5 sm:mr-1.5" />

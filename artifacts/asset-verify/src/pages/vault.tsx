@@ -122,7 +122,7 @@ export default function VaultPage() {
   const escrowMutation = useMutation({
     mutationFn: (body: object) => apiFetch("/api/custody/escrow", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: (data) => {
-      toast({ title: "🔒 Funds Locked in Escrow", description: `Custody ID: ${data.custodyId} — Awaiting Founder release` });
+      toast({ title: "🔒 Funds Locked in Escrow", description: `Custody ID: ${data.custodyId} — Awaiting Foundation release` });
       setEscrowForm({ senderAccount: "", receiverAccount: "", amount: "", description: "" });
       qc.invalidateQueries({ queryKey: ["custody-summary"] });
       qc.invalidateQueries({ queryKey: ["custody-vault"] });
@@ -219,7 +219,7 @@ export default function VaultPage() {
                 🔒 INITIATE P2P ESCROW TRANSFER
               </h2>
               <p className="text-zinc-600 text-[11px] font-mono mb-4">
-                Funds deducted from sender immediately and locked. Founder must release to credit receiver.
+                Funds deducted from sender immediately and locked. Foundation must release to credit receiver.
               </p>
               <div className="space-y-3">
                 <div>

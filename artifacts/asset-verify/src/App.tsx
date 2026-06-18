@@ -90,7 +90,7 @@ export default App;
 const SYSTEM_LABELS: Record<string, string> = {
   "000000000000": "System Core",
   "000000000001": "Reserve Vault",
-  "111111111111": "Founder Core",
+  "111111111111": "Foundation Core",
   "222222222222": "Reserve Pool",
   "333333333333": "Stability Pool",
   "444444444444": "Security Pool",

@@ -257,7 +257,7 @@ router.post("/matrix/transfer", async (req, res): Promise<void> => {
       );
       await logTx(
         "TX_CHARGE",
-        `🔥 [CHARGE] 1% (${charge.toFixed(2)} Gravity) → Founder, deducted from ${sender.name}`,
+        `🔥 [CHARGE] 1% (${charge.toFixed(2)} Gravity) → Foundation, deducted from ${sender.name}`,
         senderAccount,
         FOUNDER_ACCOUNT,
         charge.toFixed(6),
