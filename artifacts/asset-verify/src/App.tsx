@@ -23,6 +23,21 @@ import {
 const queryClient = new QueryClient();
 
 import { useAuth } from "@/components/auth-provider";
+import {
+  Orbit,
+  Activity,
+  Network,
+  Zap,
+  Coins,
+  Users,
+  Landmark,
+  Lock,
+  Wrench,
+  User,
+  UserPlus,
+  Crown,
+  LayoutDashboard,
+} from "lucide-react";
 
 function Router() {
   const { user } = useAuth();
@@ -146,10 +161,14 @@ function Home() {
       <div className="min-h-screen bg-[#050505] text-white">
         {/* Top Nav */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-900 bg-black">
-          <span className="text-cyan-400 font-bold font-mono tracking-widest text-sm">🪐 BLACK UNIVERSE</span>
+          <span className="flex items-center gap-1.5 text-cyan-400 font-bold font-mono tracking-widest text-sm"><Orbit className="h-4 w-4" /> BLACK UNIVERSE</span>
           <div className="flex items-center gap-3">
-            <span className="text-zinc-500 text-xs font-mono">
-              {user.role === "admin" ? "👑 FOUNDER ROOT" : `👤 ${user.name}`}
+            <span className="flex items-center gap-1.5 text-zinc-500 text-xs font-mono">
+              {user.role === "admin" ? (
+                <><Crown className="h-3.5 w-3.5 text-yellow-400" /> FOUNDER ROOT</>
+              ) : (
+                <><User className="h-3.5 w-3.5" /> {user.name}</>
+              )}
             </span>
             <CurrencySelect className="bg-black border border-zinc-700 text-zinc-300 text-[10px] font-mono rounded px-1.5 py-1 focus:border-cyan-500 focus:outline-none max-w-[150px]" />
             <button
@@ -166,12 +185,12 @@ function Home() {
           <div className="bg-[#0a0a0a] border border-zinc-800 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 bg-black">
               <div className="flex items-center gap-2">
-                <span className="text-cyan-400">🌌</span>
+                <Network className="h-4 w-4 text-cyan-400" />
                 <span className="text-cyan-400 font-bold font-mono text-sm tracking-widest">BLACK UNIVERSE MATRIX ENGINE</span>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setLocation("/matrix")} className="px-3 py-1 text-[11px] font-bold font-mono bg-cyan-500 hover:bg-cyan-400 text-black rounded">OPEN MATRIX →</button>
-                <button onClick={() => setLocation("/vault")} className="px-3 py-1 text-[11px] font-bold font-mono bg-yellow-500 hover:bg-yellow-400 text-black rounded">🏛️ VAULT</button>
+                <button onClick={() => setLocation("/vault")} className="flex items-center gap-1 px-3 py-1 text-[11px] font-bold font-mono bg-yellow-500 hover:bg-yellow-400 text-black rounded"><Landmark className="h-3 w-3" /> VAULT</button>
                 <button onClick={() => setLocation("/dashboard")} className="px-3 py-1 text-[11px] font-bold font-mono bg-zinc-700 hover:bg-zinc-600 text-white rounded">DASHBOARD</button>
               </div>
             </div>
@@ -197,7 +216,7 @@ function Home() {
             <div className="p-4">
               {isAdmin && (
                 <>
-              <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-3">🔒 GENESIS SYSTEM POOLS — LIVE BALANCES</div>
+              <div className="flex items-center gap-1.5 text-zinc-600 text-[10px] font-mono tracking-widest mb-3"><Lock className="h-3 w-3" /> GENESIS SYSTEM POOLS — LIVE BALANCES</div>
               {systemAccounts.length === 0 ? (
                 <div className="text-zinc-700 text-xs font-mono text-center py-4 animate-pulse">Loading pool data...</div>
               ) : (
@@ -245,7 +264,7 @@ function Home() {
               {/* Citizens */}
               {citizens.length > 0 && (
                 <div className="mt-4">
-                  <div className="text-zinc-600 text-[10px] font-mono tracking-widest mb-2">👥 REGISTERED CITIZENS ({citizens.length})</div>
+                  <div className="flex items-center gap-1.5 text-zinc-600 text-[10px] font-mono tracking-widest mb-2"><Users className="h-3 w-3" /> REGISTERED CITIZENS ({citizens.length})</div>
                   <div className="flex flex-wrap gap-2">
                     {citizens.map((c: any) => (
                       <div key={c.accountNumber} className="border border-cyan-500/20 rounded-md px-3 py-1.5 bg-cyan-500/5">
@@ -271,7 +290,7 @@ function Home() {
                   className="cursor-pointer flex items-center justify-between mt-4 p-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 hover:bg-yellow-500/10 transition-all"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">🏛️</span>
+                    <Landmark className="h-5 w-5 text-yellow-400" />
                     <div>
                       <div className="text-yellow-400 font-bold text-xs font-mono tracking-wide">CUSTODY VAULT STATUS</div>
                       <div className="text-zinc-500 text-[10px] font-mono mt-0.5">
@@ -295,7 +314,7 @@ function Home() {
               data-testid="button-ucs-home"
             >
               <div className="flex items-center gap-3">
-                <span className="text-2xl">🪙</span>
+                <Coins className="h-6 w-6 text-cyan-300" />
                 <div className="text-left">
                   <div className="text-cyan-300 font-bold text-sm font-mono tracking-widest">UNIVERSE CONTROL SPACE</div>
                   <div className="text-zinc-500 text-[10px] font-mono mt-0.5">Minting · Approve verified assets & issue Gravity</div>
@@ -308,22 +327,25 @@ function Home() {
           {/* Quick Actions */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: "📊 Dashboard", sub: "Portfolio & Assets", path: "/dashboard", style: "border-zinc-700 hover:border-zinc-500" },
-              { label: "🔥 Matrix Engine", sub: "Mint · P2P Transfer", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
-              { label: "🏛️ Custody Vault", sub: "Lock · Escrow · Release", path: "/vault", style: "border-yellow-500/40 hover:border-yellow-500" },
+              { icon: LayoutDashboard, label: "Dashboard", sub: "Portfolio & Assets", path: "/dashboard", style: "border-zinc-700 hover:border-zinc-500" },
+              { icon: Zap, label: "Matrix Engine", sub: "Mint · P2P Transfer", path: "/matrix", style: "border-cyan-500/40 hover:border-cyan-500" },
+              { icon: Landmark, label: "Custody Vault", sub: "Lock · Escrow · Release", path: "/vault", style: "border-yellow-500/40 hover:border-yellow-500" },
               ...(isAdmin
-                ? [{ label: "🛠️ Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" }]
+                ? [{ icon: Wrench, label: "Admin", sub: "Control Room", path: "/admin", style: "border-zinc-800 hover:border-zinc-600" }]
                 : []),
-            ].map((btn) => (
-              <button
-                key={btn.path}
-                onClick={() => setLocation(btn.path)}
-                className={`p-3 bg-zinc-900 border rounded-lg text-left transition-all ${btn.style}`}
-              >
-                <div className="text-sm font-bold text-white">{btn.label}</div>
-                <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{btn.sub}</div>
-              </button>
-            ))}
+            ].map((btn) => {
+              const Icon = btn.icon;
+              return (
+                <button
+                  key={btn.path}
+                  onClick={() => setLocation(btn.path)}
+                  className={`p-3 bg-zinc-900 border rounded-lg text-left transition-all ${btn.style}`}
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-white"><Icon className="h-4 w-4 text-cyan-400" />{btn.label}</div>
+                  <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{btn.sub}</div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -333,15 +355,15 @@ function Home() {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-lg space-y-4">
-        <h1 className="text-3xl font-bold tracking-wider text-cyan-400 mb-2 text-center">
-          🪐 BLACK UNIVERSE
+        <h1 className="flex items-center justify-center gap-2 text-3xl font-bold tracking-wider text-cyan-400 mb-2 text-center">
+          <Orbit className="h-7 w-7" /> BLACK UNIVERSE
         </h1>
         <p className="text-zinc-500 text-xs font-mono text-center tracking-widest mb-4">SOVEREIGN ASSET VERIFICATION & MATRIX ENGINE</p>
 
         {/* Live System Pool Preview */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="px-4 py-2 border-b border-zinc-800 bg-black flex items-center gap-2">
-            <span className="text-cyan-500 text-[10px] font-mono tracking-widest">🌌 LIVE SYSTEM POOLS</span>
+            <span className="flex items-center gap-1.5 text-cyan-500 text-[10px] font-mono tracking-widest"><Activity className="h-3 w-3" /> LIVE SYSTEM POOLS</span>
             <CurrencySelect className="ml-auto bg-black border border-zinc-700 text-zinc-300 text-[10px] font-mono rounded px-1.5 py-0.5 focus:border-cyan-500 focus:outline-none max-w-[130px]" />
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           </div>
@@ -365,8 +387,8 @@ function Home() {
               </div>
             )}
             {citizens.length > 0 && (
-              <div className="mt-2 text-center text-zinc-600 text-[10px] font-mono">
-                👥 {citizens.length} citizen{citizens.length !== 1 ? "s" : ""} registered
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-zinc-600 text-[10px] font-mono">
+                <Users className="h-3 w-3" /> {citizens.length} citizen{citizens.length !== 1 ? "s" : ""} registered
               </div>
             )}
           </div>
@@ -374,12 +396,12 @@ function Home() {
 
         {/* Matrix Engine */}
         <div className="p-4 bg-zinc-900 border border-cyan-900 rounded-lg space-y-2">
-          <p className="text-[10px] text-cyan-600 font-mono tracking-widest text-center">🌌 SOVEREIGN MATRIX</p>
+          <p className="flex items-center justify-center gap-1.5 text-[10px] text-cyan-600 font-mono tracking-widest text-center"><Network className="h-3 w-3" /> SOVEREIGN MATRIX</p>
           <button
             onClick={() => setLocation("/matrix")}
             className="w-full py-3 bg-cyan-500 text-black font-extrabold rounded-md hover:bg-cyan-400 transition-all text-base shadow-lg shadow-cyan-500/25"
           >
-            🔥 Matrix Engine
+            <span className="inline-flex items-center justify-center gap-2"><Zap className="h-5 w-5" /> Matrix Engine</span>
           </button>
           <p className="text-[10px] text-zinc-600 font-mono text-center">Mint · P2P Transfer</p>
         </div>
@@ -391,7 +413,7 @@ function Home() {
             onClick={() => setLocation("/universe-control-space")}
             className="w-full py-3 bg-cyan-500 text-black font-extrabold rounded-md hover:bg-cyan-400 transition-all text-base shadow-lg shadow-cyan-500/25"
           >
-            🪙 Minting
+            <span className="inline-flex items-center justify-center gap-2"><Coins className="h-5 w-5" /> Minting</span>
           </button>
         </div>
 
@@ -402,7 +424,7 @@ function Home() {
             onClick={() => setLocation("/admin")}
             className="w-full py-3 bg-transparent border-2 border-cyan-500 text-cyan-400 font-bold rounded-md hover:bg-cyan-950 transition-all text-base"
           >
-            🛠️ Admin Control Room
+            <span className="inline-flex items-center justify-center gap-2"><Wrench className="h-5 w-5" /> Admin Control Room</span>
           </button>
         </div>
 
@@ -414,7 +436,7 @@ function Home() {
               onClick={() => setLocation("/dashboard")}
               className="w-full py-2.5 bg-zinc-800 text-zinc-300 font-bold rounded-md hover:bg-zinc-700 transition-all text-sm"
             >
-              👤 Log In
+              <span className="inline-flex items-center justify-center gap-2"><User className="h-4 w-4" /> Log In</span>
             </button>
           </div>
           <div className="p-3 bg-zinc-900 border border-yellow-500/30 rounded-lg space-y-1.5">
@@ -423,7 +445,7 @@ function Home() {
               onClick={() => setLocation("/vault")}
               className="w-full py-2.5 bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 font-bold rounded-md hover:bg-yellow-500/20 transition-all text-sm"
             >
-              🏛️ Open Vault
+              <span className="inline-flex items-center justify-center gap-2"><Landmark className="h-4 w-4" /> Open Vault</span>
             </button>
           </div>
         </div>
@@ -435,7 +457,7 @@ function Home() {
             onClick={() => setLocation("/register")}
             className="w-full py-3 bg-zinc-900 text-zinc-400 font-bold rounded-md hover:bg-zinc-800 transition-all text-base border border-zinc-700"
           >
-            ✨ New Registration
+            <span className="inline-flex items-center justify-center gap-2"><UserPlus className="h-4 w-4" /> New Registration</span>
           </button>
         </div>
       </div>
