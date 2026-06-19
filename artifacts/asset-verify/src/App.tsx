@@ -156,6 +156,21 @@ function Home() {
     .sort((a: any, b: any) => systemRank(a.accountNumber) - systemRank(b.accountNumber));
   const citizens = allAccounts.filter((a: any) => !SYSTEM_CORES.includes(a.accountNumber));
 
+  // Vault Value = real-asset System Vault (001) + every system pool (where the
+  // 1% fees land). Fees never move into the Vault account, but they COUNT here —
+  // so backing grows live from assets, revaluation AND fees.
+  const sysBal = (n: string) =>
+    Number(allAccounts.find((a: any) => a.accountNumber === n)?.gravityBalance ?? 0);
+  const vaultValueG =
+    sysBal("000000000001") +
+    sysBal("111111111111") +
+    sysBal("222222222222") +
+    sysBal("333333333333") +
+    sysBal("444444444444") +
+    sysBal("555555555555");
+  const coreSupplyG = sysBal("000000000000");
+  const backingPct = coreSupplyG > 0 ? (vaultValueG / coreSupplyG) * 100 : 0;
+
   if (user) {
     return (
       <div className="min-h-screen bg-[#050505] text-white">
@@ -253,7 +268,10 @@ function Home() {
                           <div className="text-red-400/70 text-[8px] font-mono tracking-widest mt-0.5">TOTAL GRAVITY SUPPLY</div>
                         )}
                         {isVault && (
-                          <div className="text-yellow-400/70 text-[8px] font-mono tracking-widest mt-0.5">ASSET BACKING · 200%</div>
+                          <>
+                          <div className="text-yellow-400/70 text-[8px] font-mono tracking-widest mt-0.5">VAULT VALUE · {format(vaultValueG)}</div>
+                          <div className="text-yellow-400/70 text-[8px] font-mono tracking-widest mt-0.5">ASSET BACKING · {backingPct.toFixed(0)}% (min 200%)</div>
+                          </>
                         )}
                       </div>
                     );

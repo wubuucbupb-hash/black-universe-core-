@@ -119,16 +119,28 @@ export default function UniverseControlSpace() {
     );
 
   // ── Vault 200% backing status ───────────────────────────────────────────
-  // System Vault (000000000001) is the ONLY pool that backs minting. The Users
-  // Vault (000000000002) holds user custody locks — shown + counted in the Total
-  // Vault, but it NEVER backs minting.
+  // Vault Value = the real-asset System Vault (000000000001) PLUS every system
+  // pool (Foundation/Reserve/Stability/Security/Growth) where the 1% fees
+  // accumulate. Fees never move into the Vault account, but they COUNT toward
+  // backing. The Users Vault (000000000002) holds user custody locks — shown in
+  // the Total Vault but it NEVER backs minting.
   const coreAcct = accounts.find((a) => a.accountNumber === "000000000000");
   const vaultAcct = accounts.find((a) => a.accountNumber === "000000000001");
   const usersVaultAcct = accounts.find(
     (a) => a.accountNumber === "000000000002",
   );
   const coreGravity = coreAcct ? Number(coreAcct.gravityBalance) : 0;
-  const vaultValue = vaultAcct ? Number(vaultAcct.gravityBalance) : 0;
+  const poolBal = (n: string) => {
+    const a = accounts.find((x) => x.accountNumber === n);
+    return a ? Number(a.gravityBalance) : 0;
+  };
+  const vaultValue =
+    (vaultAcct ? Number(vaultAcct.gravityBalance) : 0) +
+    poolBal("111111111111") +
+    poolBal("222222222222") +
+    poolBal("333333333333") +
+    poolBal("444444444444") +
+    poolBal("555555555555");
   const foundationAcct = accounts.find(
     (a) => a.accountNumber === "111111111111",
   );
@@ -317,7 +329,7 @@ export default function UniverseControlSpace() {
             data-testid="vault-status-banner"
           >
             <span className="text-yellow-400">
-              🏦 System Vault {format(vaultValue)}
+              🏦 Vault Value {format(vaultValue)}
             </span>
             <span className="text-sky-400">
               👥 Users Vault {format(usersVaultValue)}

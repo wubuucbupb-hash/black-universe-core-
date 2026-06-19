@@ -34,8 +34,9 @@ export const VAULT_ACCOUNT = "000000000001";
 export const USERS_VAULT = "000000000002";
 // ₹ value represented by one unit of Gravity (₹10,000 = 1 G).
 export const GRAVITY_RATE = 10000;
-// Backing floor: System Core gravity must never exceed Vault gravity (1:1).
-export const VAULT_BACKING_RATIO = 1;
+// Backing floor: the Vault Value (System Vault + all system pools, where the 1%
+// fees accumulate) must be at least 200% of the System Core supply (2:1).
+export const VAULT_BACKING_RATIO = 2;
 // Black Universe Equity price: how many Gravity buys ONE BU Equity unit.
 // Change this single constant to re-price equity.
 export const EQUITY_PRICE_GRAVITY = 100;
@@ -200,18 +201,30 @@ export async function getVaultStatus(
         VAULT_ACCOUNT,
         USERS_VAULT,
         SYSTEM_MAIN,
+        FOUNDER_ACCOUNT,
+        RESERVE_ACCOUNT,
+        STABILITY_ACCOUNT,
+        SECURITY_ACCOUNT,
+        GROWTH_ACCOUNT,
       ]),
     );
 
-  const vaultGravity = Number(
-    rows.find((r) => r.accountNumber === VAULT_ACCOUNT)?.gravityBalance ?? 0,
-  );
-  const usersVaultGravity = Number(
-    rows.find((r) => r.accountNumber === USERS_VAULT)?.gravityBalance ?? 0,
-  );
-  const coreGravity = Number(
-    rows.find((r) => r.accountNumber === SYSTEM_MAIN)?.gravityBalance ?? 0,
-  );
+  const bal = (acc: string) =>
+    Number(rows.find((r) => r.accountNumber === acc)?.gravityBalance ?? 0);
+
+  // Vault Value = the real-asset System Vault PLUS every system pool (where the
+  // 1% transfer/escrow fees accumulate). Fees never physically move into the
+  // Vault account — they stay in the Foundation pool — but they COUNT toward the
+  // backing. So backing grows live from assets, revaluation AND system fees.
+  const vaultGravity =
+    bal(VAULT_ACCOUNT) +
+    bal(FOUNDER_ACCOUNT) +
+    bal(RESERVE_ACCOUNT) +
+    bal(STABILITY_ACCOUNT) +
+    bal(SECURITY_ACCOUNT) +
+    bal(GROWTH_ACCOUNT);
+  const usersVaultGravity = bal(USERS_VAULT);
+  const coreGravity = bal(SYSTEM_MAIN);
   const requiredVault = coreGravity * VAULT_BACKING_RATIO;
   const ratio =
     coreGravity > 0
@@ -291,14 +304,14 @@ export async function mintGravity(
 
   const gravityTotal = inrValue / GRAVITY_RATE;
 
-  // Step 0: 1:1 Vault backing guard. After this mint, System Core must still be
-  // fully backed — the Vault must hold at least as much Gravity as the new Core.
+  // Step 0: 200% Vault backing guard. After this mint, the Vault Value (System
+  // Vault + all system pools/fees) must still be at least 200% of System Core.
   const status = await getVaultStatus(exec);
   const newCoreGravity = status.coreGravity + gravityTotal;
   const requiredVault = newCoreGravity * VAULT_BACKING_RATIO;
   if (status.vaultGravity < requiredVault) {
     throw new Error(
-      `INSUFFICIENT_VAULT_BACKING: Minting ${gravityTotal.toFixed(2)} G needs the Vault to hold ${requiredVault.toFixed(2)} G of backing (1:1), but the Vault holds only ${status.vaultGravity.toFixed(2)} G. Lock more asset backing into the Vault first.`,
+      `INSUFFICIENT_VAULT_BACKING: Minting ${gravityTotal.toFixed(2)} G needs the Vault to hold ${requiredVault.toFixed(2)} G of backing (200%), but the Vault holds only ${status.vaultGravity.toFixed(2)} G. Lock more asset backing into the Vault first.`,
     );
   }
 
