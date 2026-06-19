@@ -85,7 +85,8 @@ router.get("/matrix/accounts", async (_req, res): Promise<void> => {
 });
 
 // ── GET /api/matrix/logs ───────────────────────────────────────────────────
-router.get("/matrix/logs", async (_req, res): Promise<void> => {
+router.get("/matrix/logs", async (req, res): Promise<void> => {
+  if (!(await requireAdmin(req, res))) return;
   const logs = await db
     .select()
     .from(matrixTransactionsTable)

@@ -13,7 +13,7 @@ import {
   useAdminListUsers,
   getAdminListUsersQueryKey,
 } from "@workspace/api-client-react";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { GRAVITY_RATE } from "@/lib/currency";
 import { useCurrency, CurrencySelect } from "@/components/currency-provider";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -626,7 +626,7 @@ export default function Admin() {
                 <Skeleton className="h-8 w-32" />
               ) : (
                 <div className="text-2xl font-serif font-bold text-green-600">
-                  {formatCurrency(stats?.totalVerifiedValue || 0)}
+                  {format(Number(stats?.totalVerifiedValue || 0) / GRAVITY_RATE)}
                 </div>
               )}
             </CardContent>
@@ -644,7 +644,7 @@ export default function Admin() {
               ) : (
                 <>
                   <div className="text-2xl font-serif font-bold text-amber-900">
-                    {formatCurrency(stats?.totalFeesEarned || 0)}
+                    {format(Number(stats?.totalFeesEarned || 0) / GRAVITY_RATE)}
                   </div>
                   <p className="text-xs text-amber-700 mt-1">
                     1% of all approved asset value
@@ -964,7 +964,7 @@ export default function Admin() {
                           {u.assetCount}
                         </td>
                         <td className="px-4 py-2 text-right text-green-400 font-bold">
-                          {formatCurrency(u.totalClaimedValue)}
+                          {format(Number(u.totalClaimedValue || 0) / GRAVITY_RATE)}
                         </td>
                         <td className="px-4 py-2 text-zinc-600">
                           {formatDate(u.createdAt)}
