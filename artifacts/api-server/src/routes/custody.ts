@@ -171,6 +171,12 @@ router.get("/custody/mine", async (req, res): Promise<void> => {
 router.post("/custody/lock", async (req, res): Promise<void> => {
   if (!requireSession(req, res)) return;
 
+  const founder = await isFounder(req.session!.userId!);
+  if (!founder) {
+    res.status(403).json({ error: "Foundation Root access required" });
+    return;
+  }
+
   try {
     const { ownerAccount, assetType, valuation, description } = req.body;
 
