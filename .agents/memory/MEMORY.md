@@ -6,7 +6,7 @@
 - [Vault = documented deposits only](vault-documented-deposits-only.md) — Vault changes ONLY via asset pipeline; APPROVE now auto-locks (deposit merged in, atomic, gated on pending); no separate Deposit&Mint step; manual anchor removed; proof docs required.
 - [Vault vs System Core backing](vault-200-backing.md) — System Vault(001) is the ONLY mint-backing pool; Users Vault(002) now 0 (custody moved off it); BOTH in GRAVITY; display currency view-only.
 - [drizzle-zod must import zod/v4](drizzle-zod-v4-import.md) — schema files using createInsertSchema must import z from "zod/v4"; a plain "zod" import breaks lib declaration emit and cascades fake "no exported member" errors into api-server.
-- [password reset & doc ACL](password-reset-and-doc-acl.md) — reset must stay token-based (never email-only); GET /storage/objects/* must stay session+owner gated before touching storage.
+- [password reset & doc ACL](password-reset-and-doc-acl.md) — reset must stay token-based (never email-only); /storage/objects/* + /storage/uploads/request-url session-gated; mobile bearer token carries tokenVersion (bumped on reset) for revocation — never revert to userId-only token.
 - [Account-number allocation is gap-fill](account-number-allocation.md) — citizen numbers reuse the lowest free suffix per cluster; cluster_counters is vestigial, never revert to a monotonic counter.
 - [object storage has no delete](object-storage-no-delete.md) — destructive admin deletes (asset/user/account) orphan documentUrls files; app-wide accepted gap, don't fix in one route only.
 - [api-server has no tsx](api-server-no-tsx.md) — run one-off TS scripts that import @workspace/db by esbuild-bundling (native deps external), not tsx/node; python3 also absent.

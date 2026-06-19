@@ -3,7 +3,8 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { pool } from "@workspace/db";
+import { pool, db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { verifyAuthToken } from "./lib/authToken";
@@ -69,13 +70,26 @@ app.use(
 // duration of the request. Route handlers continue to read req.session.userId,
 // so no per-route changes are needed and all existing ownership/ACL checks
 // still apply.
-app.use((req, _res, next) => {
+app.use(async (req, _res, next) => {
   if (!req.session.userId) {
     const header = req.headers.authorization;
     if (header?.startsWith("Bearer ")) {
-      const userId = verifyAuthToken(header.slice("Bearer ".length).trim());
-      if (userId) {
-        req.session.userId = userId;
+      const result = verifyAuthToken(header.slice("Bearer ".length).trim());
+      if (result) {
+        try {
+          const [u] = await db
+            .select({ tokenVersion: usersTable.tokenVersion })
+            .from(usersTable)
+            .where(eq(usersTable.id, result.userId))
+            .limit(1);
+          // Reject tokens whose version no longer matches the user's current
+          // tokenVersion — this is how a password reset revokes old tokens.
+          if (u && u.tokenVersion === result.tokenVersion) {
+            req.session.userId = result.userId;
+          }
+        } catch (err) {
+          req.log.error({ err }, "Bearer token user lookup failed");
+        }
       }
     }
   }

@@ -42,3 +42,23 @@ anyone with/guessing a URL could read another user's documents.
 **How to apply:** Run the access check BEFORE `getObjectEntityFile` so existence
 isn't leaked to unauthorized callers. Don't revert to serving without the gate.
 The sibling `/storage/public-objects/*` route stays intentionally public.
+
+`POST /storage/uploads/request-url` also requires a session (`req.session.userId`)
+— without it any anonymous caller could mint presigned upload URLs and dump files
+into the bucket. Keep the gate; only `/storage/public-objects/*` is public.
+
+## Bearer token revocation (mobile)
+Mobile bearer tokens are HMAC-signed `userId.tokenVersion.expiresAt.sig`
+(4-part). The bridge in `app.ts` verifies the signature/expiry AND looks up the
+user's current `users.token_version`, only populating the session when they
+match. Password reset bumps `token_version` (`+1`) in the same tx, so every
+previously issued token is instantly revoked.
+
+**Why:** tokens were originally stateless `userId.expiresAt` with no way to
+revoke a leaked/old token before its 7-day expiry — a real risk for a money app.
+
+**How to apply:** Never revert the token to a userId-only payload, and never drop
+the DB version check in the bridge, or revocation silently stops working. Any new
+"force logout / revoke sessions" action just bumps `users.token_version`. The
+column was added via raw `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (never `push`,
+which wants to drop the runtime `session` table).

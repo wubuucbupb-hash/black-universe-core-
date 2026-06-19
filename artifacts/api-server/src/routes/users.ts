@@ -94,7 +94,7 @@ router.post("/users/register", async (req, res): Promise<void> => {
       .returning();
 
     req.session.userId = user.id;
-    res.status(201).json({ user: userResponse(linkedUser), token: issueAuthToken(user.id) });
+    res.status(201).json({ user: userResponse(linkedUser), token: issueAuthToken(linkedUser.id, linkedUser.tokenVersion) });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Registration failed";
     res.status(500).json({ error: msg });
@@ -144,7 +144,7 @@ router.post("/users/login", async (req, res): Promise<void> => {
     }
 
     req.session.userId = adminUser.id;
-    res.json({ user: userResponse(adminUser), token: issueAuthToken(adminUser.id) });
+    res.json({ user: userResponse(adminUser), token: issueAuthToken(adminUser.id, adminUser.tokenVersion) });
     return;
   }
   // ── End admin fast-path ────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ router.post("/users/login", async (req, res): Promise<void> => {
   }
 
   req.session.userId = user.id;
-  res.json({ user: userResponse(user), token: issueAuthToken(user.id) });
+  res.json({ user: userResponse(user), token: issueAuthToken(user.id, user.tokenVersion) });
 });
 
 // ── Current user ──────────────────────────────────────────────────────────────
@@ -338,7 +338,7 @@ router.post("/users/reset-password", async (req, res): Promise<void> => {
 
       await tx
         .update(usersTable)
-        .set({ passwordHash })
+        .set({ passwordHash, tokenVersion: sql`${usersTable.tokenVersion} + 1` })
         .where(eq(usersTable.id, resetRow.userId));
     });
 
