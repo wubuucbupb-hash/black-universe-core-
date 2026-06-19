@@ -204,7 +204,7 @@ export default function VaultPage() {
         <div className="border border-yellow-500/30 rounded-xl p-4 bg-yellow-500/5 flex items-center justify-between">
           <div>
             <div className="text-yellow-500 text-[10px] font-mono tracking-widest">TOTAL LOCKED GRAVITY VALUE</div>
-            <div className="text-yellow-400 text-2xl font-bold font-mono mt-1">{fmt(summary.totalLockedValue)} Gravity</div>
+            <div className="text-yellow-400 text-2xl font-bold font-mono mt-1">{fmt(Number(summary.totalLockedValue) / GRAVITY_RATE)} Gravity</div>
           </div>
           <div className="text-4xl opacity-40">🔒</div>
         </div>
@@ -405,8 +405,9 @@ export default function VaultPage() {
                                 onChange={(ev) => setRevalueValue(ev.target.value)}
                                 className="w-32 bg-black border border-cyan-700 rounded px-2 py-1 text-cyan-300 text-xs font-mono focus:border-cyan-500 focus:outline-none"
                               />
+                              <span className="text-cyan-500 text-xs font-mono">G</span>
                               <button
-                                onClick={() => revalueMutation.mutate({ id: e.id, valuation: revalueValue })}
+                                onClick={() => revalueMutation.mutate({ id: e.id, valuation: String(Number(revalueValue) * GRAVITY_RATE) })}
                                 disabled={revalueMutation.isPending || !revalueValue}
                                 className="px-2 py-1 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-black text-[10px] font-bold rounded"
                               >
@@ -419,11 +420,11 @@ export default function VaultPage() {
                                 CANCEL
                               </button>
                             </div>
-                            {revalueValue && Number(revalueValue) !== Number(e.valuation) && (
+                            {revalueValue && Number(revalueValue) !== Number(e.valuation) / GRAVITY_RATE && (
                               <div className="text-[10px] font-mono mt-1" data-testid={`revalue-preview-${e.id}`}>
-                                {Number(revalueValue) > Number(e.valuation) ? (
+                                {Number(revalueValue) > Number(e.valuation) / GRAVITY_RATE ? (
                                   <span className="text-emerald-400">
-                                    🏦 +{fmt((Number(revalueValue) - Number(e.valuation)) / GRAVITY_RATE)} G → System Vault backing
+                                    🏦 +{fmt(Number(revalueValue) - Number(e.valuation) / GRAVITY_RATE)} G → System Vault backing · ≈ ₹{fmt((Number(revalueValue) - Number(e.valuation) / GRAVITY_RATE) * GRAVITY_RATE)}
                                   </span>
                                 ) : (
                                   <span className="text-zinc-500">
@@ -434,7 +435,10 @@ export default function VaultPage() {
                             )}
                           </>
                         ) : (
-                          <div className="text-cyan-400 text-xs font-mono mt-0.5">₹ {fmt(e.valuation)}</div>
+                          <div className="text-cyan-400 text-xs font-mono mt-0.5">
+                            {fmt(Number(e.valuation) / GRAVITY_RATE)} G
+                            <span className="text-zinc-600"> · ₹{fmt(e.valuation)}</span>
+                          </div>
                         )}
                         {e.escrowFromAccount && (
                           <div className="text-zinc-500 text-[10px] font-mono mt-1">
@@ -450,7 +454,7 @@ export default function VaultPage() {
                         <div className="shrink-0 flex flex-col gap-1.5">
                           {revalueId !== e.id && e.status !== "RELEASED" && !e.escrowFromAccount && (
                             <button
-                              onClick={() => { setRevalueId(e.id); setRevalueValue(String(e.valuation)); }}
+                              onClick={() => { setRevalueId(e.id); setRevalueValue(String(Number(e.valuation) / GRAVITY_RATE)); }}
                               className="px-3 py-1.5 bg-cyan-600/80 hover:bg-cyan-500 text-black text-xs font-bold rounded-md transition-all"
                             >
                               ✏️ REVALUE
